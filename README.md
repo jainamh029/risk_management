@@ -11,7 +11,7 @@ This project provides a complete framework for:
 - **Portfolio Optimization**: Risk-adjusted portfolio construction and analysis
 - **Visualizations**: Interactive and static plots for market insights
 
-## 🎯 Key Features
+## 🎯 Key Feature
 
 ### 1. **Comprehensive Data Fetcher (SP500DataFetcher)**
    - Fetches data for 468+ S&P 500 stocks across all sectors
