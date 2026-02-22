@@ -14,7 +14,7 @@
 
 <br/>
 
-[🎯 Overview](#-project-overview) · [🏗 Architecture](#-system-architecture) · [⚙️ Features](#️-features-in-depth) · [🚀 Quickstart](#-quickstart) · [📐 Methodology](#-methodology) · [📬 Contact](#-contact)
+[🎯 Overview](#-project-overview) · [🏗 Architecture](#-system-architecture) · [⚙️ Features](#️-features-in-depth) · [🚀 Quickstart](#-quickstart) · [📐 Methodology](#-methodology) · [📈 Results](#-key-outputs) · [📬 Contact](#-contact)
 
 </div>
 
@@ -241,6 +241,41 @@ Standard k-fold CV randomly shuffles data, allowing future information to contam
 
 **Why Risk Parity?**
 Mean-variance optimization tends to produce highly concentrated portfolios dominated by low-volatility assets. Risk parity ensures each position contributes equally to total portfolio risk, delivering more robust diversification — particularly important during regime changes when asset correlations shift dramatically.
+
+---
+
+## 📈 Key Outputs
+
+Running the full pipeline generates five categories of output:
+
+| Output | Description |
+|---|---|
+| **Risk Metrics DataFrame** | 47+ metrics per stock — Sharpe, Sortino, Calmar, drawdown, beta — exportable as a ranked table |
+| **VaR/ES Report** | Position-level and portfolio-level risk estimates at 95% & 99% confidence across three methods |
+| **ML Forecast DataFrame** | 63-day predicted returns per stock with model evaluation metrics (MSE, MAE, R²) |
+| **Optimized Portfolio Weights** | Allocation tables for Max Sharpe, Min Volatility, and Risk Parity strategies |
+| **Interactive Visualizations** | Efficient frontier, correlation heatmaps, drawdown charts, and feature importance plots via Plotly |
+
+### Sample output structure
+
+```python
+# Risk metrics — ranked DataFrame (one row per stock)
+metrics.head()
+#    Ticker  Sharpe  Sortino  Calmar  MaxDrawdown  AnnualVol  VaR_95  ES_95  Beta  ...
+
+# ML predictions — forward return estimates
+predictions.head()
+#    Ticker  Predicted_Return_63d  Model_R2  MAE  ...
+
+# Portfolio weights — capital allocation per strategy
+max_sharpe['weights'].head()
+#    Ticker  Weight
+#    AAPL    0.082
+#    MSFT    0.071
+#    ...
+```
+
+> **Note:** Exact output values depend on the date range and universe of stocks fetched. Results shown are illustrative of the output structure.
 
 ---
 
