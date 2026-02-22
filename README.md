@@ -14,7 +14,7 @@
 
 <br/>
 
-[🎯 Overview](#-project-overview) · [🏗 Architecture](#-system-architecture) · [⚙️ Features](#️-features-in-depth) · [🚀 Quickstart](#-quickstart) · [📐 Methodology](#-methodology) · [📈 Results](#-key-outputs) · [📬 Contact](#-contact)
+[🎯 Overview](#-project-overview) · [🏗 Architecture](#-system-architecture) · [⚙️ Features](#️-features-in-depth) · [🚀 Quickstart](#-quickstart) · [📐 Methodology](#-methodology) · [📬 Contact](#-contact)
 
 </div>
 
@@ -63,7 +63,7 @@ Six modular components that pipeline sequentially into each other:
 
 ### 1. Data Infrastructure — `SP500DataFetcher`
 
-- Fetches **468+ S&P 500 stocks** and major ETFs (`SPY`, `QQQ`, `IWM`, `EFA`, `EEM`, `AGG`) via `yfinance`
+- Fetches **468+ S&P 500 stocks** and major ETFs (`SPY`, `QQQ`, `DIA`, `IWM`, `VTI`, `VOO`, `IVV`, `EFA`, `EEM`, `AGG`) via `yfinance`
 - Covers all **11 GICS sectors**: Technology, Healthcare, Financials, Industrials, Energy, Materials, Utilities, Real Estate, Consumer Discretionary, Consumer Staples, Communication Services
 - Robust batch fetching (20 stocks/batch) with automatic error handling and fallback mechanisms
 - Outputs: clean price series, return series, and volume data aligned across all tickers
@@ -244,41 +244,6 @@ Mean-variance optimization tends to produce highly concentrated portfolios domin
 
 ---
 
-## 📈 Key Outputs
-
-Running the full pipeline generates five categories of output:
-
-| Output | Description |
-|---|---|
-| **Risk Metrics DataFrame** | 47+ metrics per stock — Sharpe, Sortino, Calmar, drawdown, beta — exportable as a ranked table |
-| **VaR/ES Report** | Position-level and portfolio-level risk estimates at 95% & 99% confidence across three methods |
-| **ML Forecast DataFrame** | 63-day predicted returns per stock with model evaluation metrics (MSE, MAE, R²) |
-| **Optimized Portfolio Weights** | Allocation tables for Max Sharpe, Min Volatility, and Risk Parity strategies |
-| **Interactive Visualizations** | Efficient frontier, correlation heatmaps, drawdown charts, and feature importance plots via Plotly |
-
-### Sample output structure
-
-```python
-# Risk metrics — ranked DataFrame (one row per stock)
-metrics.head()
-#    Ticker  Sharpe  Sortino  Calmar  MaxDrawdown  AnnualVol  VaR_95  ES_95  Beta  ...
-
-# ML predictions — forward return estimates
-predictions.head()
-#    Ticker  Predicted_Return_63d  Model_R2  MAE  ...
-
-# Portfolio weights — capital allocation per strategy
-max_sharpe['weights'].head()
-#    Ticker  Weight
-#    AAPL    0.082
-#    MSFT    0.071
-#    ...
-```
-
-> **Note:** Exact output values depend on the date range and universe of stocks fetched. Results shown are illustrative of the output structure.
-
----
-
 ## 📊 Data Coverage
 
 | Sector | Approx. Stocks |
@@ -294,7 +259,7 @@ max_sharpe['weights'].head()
 | Materials | 26+ |
 | Real Estate | 31+ |
 | Utilities | 31+ |
-| ETFs (SPY, QQQ, IWM, VTI…) | 10 |
+| ETFs (SPY, QQQ, DIA, IWM, VTI, VOO, IVV, EFA, EEM, AGG) | 10 |
 | **Total** | **~468** |
 
 ---
