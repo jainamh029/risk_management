@@ -2,80 +2,80 @@
 
 Branch `fix/rigor-pass`. Nothing has been pushed; no pull request, remote change or message was made.
 
-Ground rule from the owner for this stage: no data is created, assumed, simulated or filled in. Every analysis and every test uses the real snapshot downloaded from Yahoo Finance.
+Owner's ground rules: no data is created, assumed, simulated or filled in; every analysis and every test uses the real snapshot downloaded from Yahoo Finance. In the latest request the owner also asked that the ML module stay, that every formula, method and piece of logic be checked, that the whole project be tested with the result reported, that the dashboard be interactive, and that no synthetic data remain.
 
 ## 1. Status
 
-| Stage | Status |
+| Request | Status |
 |---|---|
-| Stage 1: audit (`AUDIT.md`, `CLAIMS.md`, `DECISIONS.md`) | done, committed as `47cf740` |
-| Core repairs (section 3) | done and tested, not yet committed (see section 6) |
-| Optional new features (section 4) | not started |
+| Stage 1 audit | done (`47cf740`) |
+| Core repairs (VaR, backtest, metrics, portfolio, data layer) | done (`34b4357`, `fd2fce9`, `104a584`) |
+| ML module stays | done: rebuilt with an honest evaluation (section 4) |
+| Check every formula, method and piece of logic | done: `FORMULAS.md`; two defects found and fixed (section 3) |
+| Run the tests on the whole project and report | done (section 2) |
+| Interactive dashboard | done: `dashboard/app.py`, six tabs, tested headless and in a browser |
+| No synthetic data in the project | done: scan in section 5; original notebook removed from the working tree |
 
-## 2. Commands actually run and their outcomes
+## 2. Test results on the whole project (final)
 
-| # | Command | Outcome |
+| Check | Result |
+|---|---|
+| `pytest tests` in the working environment | 97 passed in 96 s (backtest 13, dashboard 13, data 9, metrics 9, ML 17, portfolio 18, README and documents 9, VaR 9) |
+| Same suite in a brand-new virtual environment built only from `requirements.txt` | 97 passed (final run, below) |
+| `scripts/run_pipeline.py` rerun in the clean environment, then `diff -rq results` against the repository | every file byte-identical (after rounding the forecast files to 10 decimals; before the rounding, `ml_latest_forecasts.csv` differed by 1.1e-16 from multithreaded floating-point summation, with the same ranking) |
+| `scripts/make_readme_tables.py --check` | README results block matches the results files |
+| `notebooks/walkthrough.ipynb` executed with nbclient | 6 code cells, 0 errors, 4 figures |
+| Dashboard, headless (Streamlit AppTest) | 13 tests: loads, overview numbers equal the results files, VaR explorer breach counts equal an independent loop, backtest filters, portfolio presets and custom screen, forecast table filters, every control option, data tables, missing-data message, no unsupported text |
+| Dashboard, live browser | opened at `localhost:8501`; Overview, VaR explorer (changed confidence to 95% and saw SPY update to 86 breaches of 1,713), Portfolio experiment and Forecasting model tabs viewed. Layout problems found and fixed: chart title overlapping legend and range buttons; misleading upward arrow on "expected" values; default portfolio preset was the one that cannot be built. The Backtest comparison and Glossary tabs were exercised by the headless tests but not looked at in the browser. The server was stopped afterwards |
+| Defect reintroduction: 21 original or likely defects put back one at a time into a scratch copy | 21 of 21 made the suite fail. Misses found along the way and fixed in the tests: screen relaxation (two boundary tests added); drawdown without starting capital (test changed to use real series where the definitions differ); a mutant that changed nothing was discarded |
+
+## 3. Formula and logic review
+
+Every formula is listed in `FORMULAS.md` with the independent test that checks it. Defects found in this pass:
+
+| Defect | Fix | Guard |
 |---|---|---|
-| 1 | `python3 -m venv .venv` and `pip install` of numpy, pandas, scipy, yfinance, pyarrow, matplotlib, pytest, nbformat, nbclient, ipykernel | Installed numpy 2.5.4, pandas 3.1.0, scipy 1.18.1, yfinance 1.7.0, pyarrow 26.0.0, matplotlib 3.11.2, pytest 9.1.1, nbformat 5.11.1, nbclient 0.11.0, ipykernel 7.4.0, jupyter_client 8.10.0 (Python 3.12) |
-| 2 | Download test: `BRK-B`, `BRK.B`, `BF-B`, `SPY`, `VLTO`, `^IRX` | `BRK.B` returned nothing; `BRK-B` returned 1,964 rows; `VLTO` began 2023-10-04 (767 rows); confirmed the dot-conversion bug and the late-listing case on real data |
-| 3 | `python scripts/build_universe.py` | `data/universe.csv`: 483 unique tickers, 10 ETFs (duplicate `CVS` dropped, order kept) |
-| 4 | `python scripts/fetch_data.py` | 462 of 483 tickers returned (452 stocks, 10 ETFs), 21 returned nothing; 2019-01-02 to 2026-10-23, 1,964 trading days; no internal gaps; 16 tickers listed after the start; 4 tickers stopped before the end |
-| 5 | Retried the 21 failures individually (10 of them, including BK, CTRA, K, MMC) | All still returned nothing |
-| 6 | Looked at the series of the 4 early-stopping names | AVB, EQR, EA, WBD each have exactly one valid price; recorded in `data/prices_meta.json`, excluded from analyses that need history |
-| 7 | `python scripts/run_pipeline.py` (several times during development; final run after the last code change) | Writes `results/`. Final run output: 458 tickers backtested; pooled breach rates and rejection shares as in the README; conservative preset not constructed (0 stocks passed), balanced and aggressive constructed |
-| 8 | `pytest tests` | 69 passed (final). Earlier: one test failed because of my own wrong tolerance in `test_historical_var_is_the_empirical_quantile` (the exceedance share can exceed the target by 1/n under linear interpolation); the test was corrected, not the code. Later failures in `test_readme_claims.py` (bare file names in the README layout table, a regex that contained emoji characters) were fixed in the test and README |
-| 9 | Defect reintroduction ("mutation") run: original defects put back one at a time into a scratch copy, full suite run each time | 11 distinct reintroduced defects, all made the suite fail: wrong VaR sign, sqrt(252) scaling, Kupiec zero-breach returns 0, `bfill`, forecast window including the forecast day, downside deviation as std of negatives, fit using post-training data, screen relaxation, minimum assets lowered to 1, dot tickers, selection order reversed. The first run had one miss (screen relaxation), because a zero-passer screen was rejected by the optimiser anyway; two boundary tests using real training Sharpe ratios were added and the mutant is now caught |
-| 10 | Two optimizer defects: weights replaced by equal weights; Sharpe minimised instead of maximised | Both made the suite fail (`test_optimiser_beats_equal_weight_on_the_training_sharpe` / `test_weights_are_a_local_optimum_of_the_training_sharpe` and others). My first attempt used a mutant that changed nothing (`jac=None`), so its "not caught" line was discarded; the shell was then blocked twice by a tool-side permission service error and the corrected run was done afterwards. Total: 13 reintroduced defects, 13 caught |
-| 11 | Executed `notebooks/walkthrough.ipynb` with nbclient against a kernel registered inside `.venv` | 6 code cells, no errors, 4 figures; figures inspected by eye |
-| 12 | Clean-environment gate: new venv built only from `requirements.txt`, copy of the repository, `pytest` | 69 passed in that environment |
-| 13 | In that copy: `scripts/run_pipeline.py`, then `diff -rq results` against the repository's `results/`; `scripts/make_readme_tables.py --check` | Results files identical after the clean rerun; README results block matches the results |
-| 14 | In that copy: moved `data/prices.parquet` away and ran `pytest tests/test_data.py` | Pytest stopped with "No price snapshot at ... Create it with: python scripts/fetch_data.py" |
+| Maximum drawdown in `portfolio.performance` ignored the starting capital as a peak | start the wealth series at 1.0 | `test_max_drawdown_counts_the_starting_capital_as_a_peak` |
+| ML direction accuracy treated an exactly flat return differently from the baseline | both use up versus not up | `test_baseline_and_scores_match_independent_formulas` |
 
-## 3. Core repairs (all done)
+Other logic reviewed and found correct: return calculation, VaR and ES definitions, rolling forecast alignment, Kupiec statistic and p-value, breach definition, descriptive statistics, screen and optimiser constraints, constant-weight portfolio returns, feature windows, target alignment, purge boundary, rank IC and its independent-period inference. Judgement calls that are not errors but are conventions are listed at the end of `FORMULAS.md`.
 
-| Repair | Audit IDs | Where |
-|---|---|---|
-| Pinned, complete requirements; `resample('M')` removed | B12 | `requirements.txt` |
-| Data layer: dashes kept, no filling, failures and gaps recorded, explicit end date | B3, B4, B13 | `riskengine/data.py`, `scripts/fetch_data.py` |
-| One-day VaR/ES, sign fixed, annualisation removed, Monte Carlo removed | B1, B2, B7 | `riskengine/var.py` |
-| Kupiec rewritten; both methods backtested; rejection shares reported | B5, B6 | `riskengine/backtest.py` |
-| Metrics corrected; risk-free rate from real T-bill yields | B11 | `riskengine/metrics.py` |
-| Portfolio: train/test split, screens never relaxed, out-of-sample reporting | B10 | `riskengine/portfolio.py`, `riskengine/config.py` |
-| ML module removed | B8, B9 | decision D2 |
-| Advice text and promotional output removed; README rewritten from results | B14, A1-A70 | `README.md`, `scripts/make_readme_tables.py` |
-| Universe described truthfully; ETFs flagged and kept out of portfolios | B15 | `data/universe.csv`, README |
-| Tests on real data, 69 in total | all | `tests/` |
-| Original notebook and README moved to `legacy/` | n/a | `legacy/` |
+## 4. ML module: what the real data says
 
-## 4. Optional new features (not started, need approval)
+Pooled random forest and gradient boosting (equal blend), 11 price-based features, 63-day forward return, 94,371 training samples (feature dates 2019-07-10 to 2023-09-25, all targets ending by 2023-12-22), 287,999 test samples (2024-01-02 to 2026-07-27). On the test period the models do not beat the training-mean forecast: out-of-sample R squared is -0.9% (random forest), -6.0% (gradient boosting) and -3.0% (ensemble); direction accuracy is about 53.6% against 57.5% of samples that went up; the rank IC of 0.044 is not distinguishable from zero (t = 0.60 on 11 independent periods). Neither the 60-day nor the 126-day momentum feature alone shows a significant rank IC on independent periods either. This is reported as a negative result, in the README and in the dashboard.
 
-- Christoffersen independence and conditional-coverage tests; Cornish-Fisher and filtered historical VaR; 10-day horizon.
-- Minimum-variance and risk-parity allocation; Ledoit-Wolf covariance; rolling walk-forward allocation with costs.
-- Point-in-time index membership data.
-- A properly validated ML forecast.
-- A dashboard.
-- Continuous integration.
+## 5. Synthetic-data scan
 
-## 5. Not done, blocked or not applicable
+Searched every tracked and working file outside `.venv` for random-number generation, generators and the words synthetic, simulated, fake, dummy and mock.
+- Package, scripts, tests, dashboard and notebook: no random-number generation anywhere. The only matches are the guard test's own ban list and comments that say data is not simulated. `test_no_data_is_generated_or_simulated_anywhere` enforces this.
+- The original notebook contained `np.random.seed(42)` and `np.random.normal(mu, sigma, 10000)` (its "Monte Carlo" VaR). It was removed from the working tree and remains in git history (`git show 888104c:Risk_Management_and_Var_es_engine_for_stocks.ipynb`).
+- The Stage 1 audit documents quoted numbers from synthetic demonstrations. Those numbers were replaced by the same quantities measured on the real snapshot (for example: on the last 250 real SPY returns the original VaR expression gives -0.01922 at 99% against the correct +0.01815; 90 of 458 tickers had a sqrt(252)-scaled 99% VaR above 100%; 1,196 exact-zero returns would have been created for VLTO by back-filling).
+- Remaining mentions of the word "synthetic" in the documents are statements that Stage 1 used it and that it was removed.
+- Every price and rate in `data/` and `results/` comes from Yahoo Finance via yfinance (`data/prices_meta.json` records the download).
+- The only fixed numeric constants in tests that are not computed from the snapshot are the two Kupiec statistics saved in the original notebook's output from a real run (3.441928 and 4.317578) and analysis settings in `riskengine/config.py`.
 
-| Item | Category | Detail |
-|---|---|---|
-| Check of the ticker list against real S&P 500 membership | not done | No authoritative source consulted. The README says the list is unverified |
-| Line-by-line audit of the plotting in the legacy cell 14 | not done | Legacy code, superseded |
-| Independence test for VaR breaches | not applicable | Not added; the original "clustering score" was removed because it was not a test |
-| Owner confirmation of contact details | pending | The new README has no contact section; add one after confirmation |
-| Stray user-level Jupyter kernel | needs owner action | See section 7 |
+## 6. Commands that mattered, and what went wrong
 
-## 6. Commit status
+| Event | Detail |
+|---|---|
+| Notebook kernel registered with `--user` | Created `~/Library/Jupyter/kernels/python3` (outside the repository). The permission system declined my deletion and I did not work around it. It is still there; removal command in section 8 |
+| Two shell calls blocked by a permission-service error | Retried unchanged; both succeeded afterwards |
+| A bad mutant (`jac=None`) reported "not caught" | Discarded as meaningless and replaced by real optimiser mutants |
+| A test of mine used a wrong tolerance for the historical quantile | Corrected the test, not the code |
+| A test indexed a row before VLTO was listed | Corrected the test |
+| Streamlit and Python caches made a "missing data" test see the real data | Test now clears the cache and uses a loader that raises the real exception |
 
-Not committed yet at the time of writing this file; the commit hashes are in the stage report.
+## 7. Not done or not verified
 
-## 7. Side effect outside the repository that needs attention
+- The ticker list was never checked against real S&P 500 membership; the README says so.
+- Dashboard keyboard navigation and reduced-motion behaviour were set in CSS but not tested with a keyboard or the operating-system setting.
+- The Backtest comparison and Glossary tabs were not viewed in a browser.
+- No independence test for VaR breaches; no multi-day VaR; no minimum-variance, risk-parity or walk-forward allocation; no Ledoit-Wolf covariance. All listed as optional features in earlier notes and not requested.
+- Commit author is the laptop default, not a GitHub address.
 
-While registering a notebook kernel I ran `ipykernel install --user`, which created `~/Library/Jupyter/kernels/python3/` (kernel.json plus three logo files, all created during this session; the `kernels` directory did not exist before). Anaconda's Jupyter now lists a "python3" kernel that points to this repository's `.venv`. My attempt to delete the directory was declined by the permission system and I did not work around it. To remove it:
+## 8. Needs owner action
 
 ```bash
-rm -r ~/Library/Jupyter/kernels
+ls -la ~/Library/Jupyter/kernels/python3     # should hold only kernel.json and three logo files
+rm -r ~/Library/Jupyter/kernels              # removes the directory created during this session
 ```
-
-Check first with `ls -la ~/Library/Jupyter/kernels/python3`: the directory should contain only `kernel.json`, `logo-32x32.png`, `logo-64x64.png`, `logo-svg.svg`. The repository's own check kernel is registered inside `.venv/share/jupyter` and is not affected.

@@ -37,7 +37,7 @@ Files audited: `Risk_Management_and_Var_es_engine_for_stocks.ipynb` (15 cells, 8
 
 - Cell references use the 0-based notebook cell index. "Line" is the 1-based line within that cell's source. Example: "cell 3, line 39".
 - Evidence tags:
-  - **[Executed]**: I ran the original code on synthetic data, or ran a small independent calculation. Repair note: this was done with `audit/checks.py`, which is no longer in the working tree because the owner ruled out synthetic data after Stage 1 (it is in commit `47cf740`). The same findings are now re-checked on real data by the tests listed above. The synthetic data was used only to test code behaviour; none of it is a market result.
+  - **[Executed]**: I ran the original code or an independent calculation. In Stage 1 some of these runs used synthetic data. Under the owner's rule that no data may be created or simulated, that script was removed and every such statement below was re-established on the real downloaded snapshot; the numbers quoted in this document come from real data. The checks now live in `tests/`.
   - **[Read]**: established by reading the code. Not executed.
   - **[Saved output]**: taken from the outputs saved in the notebook (cell 13, execution count 7). I did not re-run the pipeline, so these numbers are not independently reproduced.
   - **[Unverified]**: not established.
@@ -52,7 +52,7 @@ The earlier chat review was based on a partial read. Verified against the full n
 |---|---|
 | The ticker list is "today's constituents applied to 2019-2024 history" | Not supported. The list is hand-typed, 483 unique tickers including 10 ETFs and 13 names that failed to download as delisted or renamed (section 3, B15). It is neither the current index nor a point-in-time index. Its membership versus the real S&P 500 is unverified. |
 | README claims 12 vs 50+ features, 28 vs 47+ metrics | Confirmed. 12 ML features; 28 keys in the metrics dict, 27 excluding `Ticker`. |
-| Parametric VaR sign error | Confirmed by execution on synthetic data (B1). |
+| Parametric VaR sign error | Confirmed by execution on real SPY returns (B1). |
 | Kupiec test returns 0 with zero breaches | Confirmed by execution (B5). Whether it changed any saved result is unknown. |
 | Single 80/20 split, `TimeSeriesSplit` unused | Confirmed. |
 | Optimizer is in-sample | Confirmed, and the saved output shows two of three "strategies" silently relaxed their screens (B10). |
@@ -65,20 +65,20 @@ Severity: **High** = changes reported numbers or invalidates a stated claim. **M
 
 ### B1. Normal VaR has the wrong sign (High) [Executed]
 - Location: cell 3, line 39 (`param_var_daily = -(mu + z_score * sigma)`); same expression, unused, at lines 131-132.
-- Closed form for the loss quantile is `-(mu - z*sigma)`. On synthetic iid normal returns (mu 0.0005, sigma 0.02) the code gives -0.03396 at 95% and -0.04851 at 99%, against closed-form +0.03625 and +0.05080.
-- The ES formula at line 40 matches the closed form (0.04517 and 0.05803 in both).
+- Closed form for the loss quantile is `-(mu - z*sigma)`. On the last 250 real SPY returns (ending 2026-10-23) the original expression gives -0.01375 at 95% and -0.01922 at 99%, against the closed form +0.01267 and +0.01815.
+- The ES formula at line 40 matches the closed form (checked in `tests/test_var.py` by numerical integration on real returns).
 - Consequence: `Param_VaR_95` and `Param_VaR_99` are negative for ordinary inputs. Downstream code reads only the `Hist_*` columns (cell 5, lines 84-87), so the optimizer and report numbers are not affected, but the parametric column is wrong in the returned DataFrame and the README presents parametric VaR as a feature.
 
 ### B2. One-day VaR/ES multiplied by sqrt(252) and labeled annual (High) [Executed, Saved output]
 - Locations: cell 3, lines 43-44, 52-53, 63-64 and the dollar columns at lines 76-77; cell 9, lines 134-135 (portfolio VaR); cell 11, line 64 (axis label "Annual VaR (%)"); thresholds on these scaled values in cell 9 (`VaR_99 < 0.35`, `< 0.45`).
 - The windows are 250 days of daily returns. Scaling a 1-day quantile by sqrt(252) is a 252-day horizon approximation that assumes iid returns, and for the parametric formulas it scales the mean by sqrt(T) when the mean scales with T.
-- Consequence: reported "VaR" exceeds 100% of position value. Saved output shows NVDA "VaR 99%: 120.4%", PWR 88.7%, KLAC 110.0%, and the long-term score table lists MU at 1.66 (166%). A long-only position cannot lose more than 100%. On synthetic data with 2% daily volatility the code returns 0.796 for 99% historical VaR.
+- Consequence: reported "VaR" exceeds 100% of position value. Saved output shows NVDA "VaR 99%: 120.4%", PWR 88.7%, KLAC 110.0%, and the long-term score table lists MU at 1.66 (166%). A long-only position cannot lose more than 100%. On the real snapshot, 99% historical VaR multiplied by sqrt(252) exceeds 100% of position value for 90 of 458 tickers (PARA 407%, AGL 305%) and is 27.7% for SPY.
 - The backtest (B6) validates the 1-day figure, while every report prints the scaled figure. What is validated is not what is shown.
 - `VaR_95_Dollar` and `VaR_99_Dollar` (lines 76-77) multiply the scaled historical figure by `portfolio_value`.
 
 ### B3. Missing-data filling uses future prices; the missing-data filter is dead code (High) [Executed, Read]
 - Location: cell 1, lines 305-313 (`close_prices.ffill().bfill()`, then a missing-share filter, then `dropna(thresh=...)`).
-- `bfill()` fills leading NaNs with the first valid price. Executed on a toy series, a late-listed asset is held flat at its first price, producing returns of exactly 0.0 for the missing period.
+- `bfill()` fills leading NaNs with the first valid price. On the real snapshot VLTO has no price before 2023-10-04: back-filling creates 1,197 rows at the first price, 1,196 exact-zero returns, and a daily return standard deviation of 0.894% against 1.435% for the real data.
 - The "remove columns with more than 30% missing data" filter at lines 308-310 is computed after filling, so the missing share is always 0 and nothing is ever removed. The `dropna(thresh=...)` at line 313 is a no-op for the same reason. Volume is also `ffill().bfill().fillna(0)` (line 316).
 - Consequence: assets that began trading after 2019-01-02 get a flat, zero-volatility history, which understates volatility, VaR and drawdown and inflates Sharpe for those names, and feeds the ML and optimizer stages.
 - Likely affected in the saved run: names in the universe whose shares began trading after the data start, for example CARR, OTIS, CEG, GEHC, VLTO, CTVA, DOW, ABNB, WBD, FOX, FOXA. None of these appears in the saved failed-ticker list. Listing dates are from general knowledge and were not verified online, so which tickers were actually back-filled in the saved run is **unverified**.
@@ -92,9 +92,9 @@ Severity: **High** = changes reported numbers or invalidates a stated claim. **M
 
 ### B5. Kupiec test: zero-breach case, no p-value, fragile arithmetic, no independence test (Medium) [Executed, Read]
 - Location: cell 3, lines 158-175 and 177-183.
-- With zero breaches the function returns 0 (lines 160-161). The correct likelihood ratio is -2*n*ln(1-p): 30.15 for n=1500 at 99%, 153.88 at 95%. Such a model (too conservative) is rejected by the real test but is labeled "Valid" here, and `Model_Quality` becomes "Good" if the other level passes.
+- With zero breaches the function returns 0 (lines 160-161). The correct likelihood ratio is -2*n*ln(1-p): 34.43 at 99% and 175.73 at 95% for SPY's real n=1713 forecasts. Such a model (too conservative) is rejected by the real test but is labeled "Valid" here, and `Model_Quality` becomes "Good" if the other level passes.
 - For breaches > 0 the formula matches an independent log-likelihood calculation: n=1525, x=23, p=0.01 gives 3.441928 and x=24 gives 4.317578, both identical to the saved rows. So the core statistic is correct for the common case.
-- The code takes the log of a product of powers `(1-p)**(n-x) * p**x`. For n=10000, x=500, p=0.05 that product underflows to 0.0 in float64. It is fine at the saved run's n=1525 but fragile.
+- The code takes the log of a product of powers `(1-p)**(n-x) * p**x`. At the pooled size of the real 99% historical backtest (n=779,137, x=12,384) that product is exactly 0.0 in float64. At the saved run's per-ticker n=1525 it is fine but fragile.
 - Validity uses a hard-coded 3.84 cutoff. There are no p-values.
 - `clustering_score` (lines 177-183) is the std/mean of calendar days between 95% breaches. It is not an independence test and is not labeled as one in the code, but the comment says "(independence test)".
 - Whether any stock in the saved run had zero breaches is **unverified** (the backtest DataFrame was not saved). At the saved 1.60% average 99% breach rate it is unlikely.
@@ -179,7 +179,7 @@ Severity: **High** = changes reported numbers or invalidates a stated claim. **M
 | S4 | The ML interval's actual coverage | Out-of-sample coverage test (needs a repaired pipeline) |
 | S5 | Whether ML has any out-of-sample skill beyond the sign base rate | Baseline comparison under purged splits |
 | S6 | Chained-assignment behaviour in cell 9 across pandas versions | Run under pinned versions |
-| S7 | Whether the `Calmar` and `Beta` fields behave at edge values | Unit tests on synthetic inputs |
+| S7 | Whether the `Calmar` and `Beta` fields behave at edge values | Checked on real data in the repair stage (`test_compute_metrics_row_matches_hand_calculation`, `test_beta_matches_least_squares_slope`) |
 | S8 | Cell 14 plotting code beyond the conclusion block | Line-by-line review in a later stage |
 | S9 | Whether yfinance adjusted closes are stable between downloads | Two downloads on different days compared |
 | S10 | Contact details in the README (LinkedIn slug, institutional email) | Confirmation by the repository owner |

@@ -3,7 +3,7 @@
 Every factual claim made by `README.md` at commit `888104c`, plus the claims the notebook prints about itself. Nothing here has been changed in the repository.
 
 Status values:
-- **verified**: confirmed by reading the code and/or by executing it on synthetic data (reproduce with `python3 -I audit/checks.py`). A claim is never marked verified because it appears in a comment or in saved notebook output.
+- **verified**: confirmed by reading the code and/or by executing it. In Stage 1 some executions used synthetic data; that script has been removed and the same checks now run on real data in `tests/`. A claim is never marked verified because it appears in a comment or in saved notebook output.
 - **unsupported**: contradicted by the code, absent from the code, or not backed by any evidence in the repository.
 - **requires execution**: cannot be confirmed without running the pipeline (network, time, a pinned environment) or without information from the repository owner.
 
@@ -20,7 +20,7 @@ Cell references: 0-based notebook cell index, 1-based line within the cell. READ
 | A5 | "ML-based alpha generation across 468+ securities" | cell 7 | No out-of-sample evidence of alpha; stale inference row (B8); negative R2 on many models in saved output | unsupported |
 | A6 | "It is not a class project. It is a working framework applied to real market data covering the full S&P 500 universe" | cell 1 lines 45-124 | Universe is a hand-typed 483-ticker list incl. 10 ETFs and merged/renamed names (B15). "Working" depends on the pandas version (B12) | unsupported |
 | A7 | "built with the same mathematical foundations ... that institutional investors use in production" | none | Comparative claim with no evidence | unsupported |
-| A8 | "Multi-method VaR/ES engine at 95% & 99% confidence" | cell 3 lines 31-77 | Historical, normal and a normal-sampling "Monte Carlo" at 95% and 99% exist and run on synthetic data. The methods are not independent (B7) and the parametric VaR has the wrong sign (B1) | unsupported |
+| A8 | "Multi-method VaR/ES engine at 95% & 99% confidence" | cell 3 lines 31-77 | Historical, normal and a normal-sampling "Monte Carlo" at 95% and 99% exist and run on real data. The methods are not independent (B7) and the parametric VaR has the wrong sign (B1) | unsupported |
 | A9 | "47+ risk-adjusted metrics ranked across 468+ securities" | cell 5 lines 107-145 | 28 keys including `Ticker` (27 metrics); several are not risk-adjusted. 468 fetched includes 10 ETFs | unsupported |
 | A10 | "Mean-variance optimization: Max Sharpe, Min Vol, Risk Parity" | cell 9 | Only Sharpe maximisation exists. "Min vol" and "risk parity" do not appear in the notebook | unsupported |
 | A11 | "Ensemble ML models forecasting 63-day forward returns" | cell 7 | Random forest and gradient boosting with a 63-day target exist. The reported "latest" forecast uses a row from 64 days before the last date (B8) | unsupported |
@@ -67,7 +67,7 @@ Cell references: 0-based notebook cell index, 1-based line within the cell. READ
 | A52 | Visualisation: "ML feature importance rankings" (line 160) | cell 7 lines 149-156 | Importances are computed and stored in the model dict; no cell plots or prints them | unsupported |
 | A53 | Quickstart: `pip install numpy pandas yfinance scipy scikit-learn matplotlib seaborn plotly` (line 169) | `requirements.txt` | The README line covers all imports; `requirements.txt` omits `yfinance`, `scikit-learn`, `plotly`. Installability on current versions is untested | requires execution |
 | A54 | Quickstart: `fetcher.fetch_data(start_date='2019-01-01', end_date='2024-01-01')` and `fetcher.returns` (lines 186-190) | cell 1 lines 136, 317 | Signature and attribute exist. `main()` uses no end date (cell 13 line 13) and the saved run ended 2026-01-26 | verified (interface); mismatch with the notebook's own run noted |
-| A55 | Quickstart: `VaRESEngine(returns, portfolio_value=100_000)` and `calculate_var_es(confidence_levels=[0.95, 0.99], window=250)` (lines 194-199) | cell 3 lines 4, 10 | Signatures match; executed on synthetic data | verified |
+| A55 | Quickstart: `VaRESEngine(returns, portfolio_value=100_000)` and `calculate_var_es(confidence_levels=[0.95, 0.99], window=250)` (lines 194-199) | cell 3 lines 4, 10 | Signatures match; executed on real data in `tests/` | verified |
 | A56 | Quickstart: `ComprehensiveRiskAnalyzer(returns, prices, var_es_results).calculate_all_metrics()` (lines 203-204) | cell 5 lines 4, 9 | Signatures match | verified (interface only). Under pandas 3.0.3 the `resample('M')` alias raises (executed) inside a `try/except` in this method, so it is expected to return no metrics (B12); the method itself was not run |
 | A57 | Quickstart: `AdvancedMLPredictor(...).predict_returns(selected_tickers=..., train_size=0.7)` (lines 209-213) | cell 7 | No `predict_returns` method; the methods are `train_models` and `generate_predictions` | unsupported |
 | A58 | Quickstart: `PortfolioOptimizer(returns, metrics)`, `optimize_max_sharpe(selected_tickers=...)`, `optimize_min_volatility(...)` (lines 218-221) | cell 9 | None exist. The class is `AdvancedPortfolioOptimizer` with `optimize_portfolio(strategy=...)` | unsupported |
@@ -145,3 +145,26 @@ Sections A to C above describe the original repository (now in `legacy/`) and ar
 | Every file path named in the README exists | `test_every_path_named_in_the_readme_exists` | verified |
 | Tests fail with a clear message when the snapshot is missing | Observed in the clean-environment copy (`PROGRESS.md` row 14) | verified once, not an automated test |
 | No emoji, no forbidden phrases in README and code | `test_no_forbidden_claims_in_readme_or_code`, `test_no_emoji_anywhere_in_documentation_or_code` | verified |
+
+## E. Claims about the forecasting module and the dashboard (current README and application)
+
+| Claim | Evidence | Status |
+|---|---|---|
+| Eleven features use prices up to and including the forecast day only | `test_features_match_a_hand_calculation`, `test_features_use_only_data_up_to_the_day`, `test_a_feature_is_missing_unless_its_whole_window_has_prices` | verified |
+| Target is the simple return from the close on day t to the close 63 trading days later | `test_target_is_the_return_to_63_trading_days_later` | verified |
+| Training uses every fifth day and only days whose target window ends by the training end; the test period starts after it | `test_training_set_is_purged_and_test_set_starts_after_it` | verified |
+| R squared is against the training-mean forecast; direction accuracy is up versus not up | `test_baseline_and_scores_match_independent_formulas` | verified |
+| Rank IC is the cross-sectional Spearman correlation per date; inference uses dates 63 trading days apart | `test_rank_ic_matches_scipy_spearman`, `test_non_overlapping_dates_are_a_full_horizon_apart` | verified |
+| The forecast is an equal blend of a random forest and gradient boosting, the same blend that is evaluated | `test_the_evaluated_ensemble_is_the_blend_that_is_deployed` | verified |
+| The latest forecast uses features from the last available date | `test_latest_forecast_uses_features_from_the_last_date` | verified |
+| No confidence intervals and no buy or sell labels | `test_no_intervals_or_trading_signals_are_produced`, `test_dashboard_text_makes_no_unsupported_claims` | verified |
+| Forecasts are not used by the portfolio experiment | `riskengine/portfolio.py` does not import `ml`; `test_every_import_in_the_package_is_in_requirements` covers dependencies only | verified by reading, not by a test |
+| Forecasting results tables in the README | `test_results_block_equals_what_the_results_files_produce`, `test_stored_ml_results_match_a_fresh_run` | verified |
+| Dashboard: VaR explorer recomputes live for any ticker, method, confidence and window | `test_var_explorer_recomputes_when_controls_change` (breach counts equal an independent loop), `test_var_explorer_both_methods_and_dollar_var` | verified |
+| Dashboard: backtest tab filters and sortable table | `test_backtest_filters_change_what_is_shown` | verified |
+| Dashboard: portfolio presets, optional custom screen, data-snooping warning | `test_portfolio_preset_switch_and_not_constructed_message`, `test_custom_screen_with_the_aggressive_settings_reproduces_the_stored_portfolio` | verified |
+| Dashboard: forecast table filter, order and row count | `test_forecast_table_filters_and_orders` | verified |
+| Dashboard: every control option runs without an exception; missing data shows instructions | `test_every_control_option_runs_without_an_exception`, `test_missing_snapshot_shows_instructions_instead_of_a_traceback` | verified |
+| Dashboard: overview figures equal the results files | `test_overview_numbers_equal_the_results_files` | verified |
+| Dashboard: charts support hover and zoom; series differ by line style and marker; a data table sits behind the explorer chart | Plotly figure settings in `dashboard/app.py`; viewed in a browser during this pass (SPY explorer, portfolio and forecasting tabs); not an automated test | verified by inspection only |
+| Dashboard: visible keyboard focus and reduced-motion support | CSS in `dashboard/app.py`; not tested in a browser with keyboard navigation | not verified |

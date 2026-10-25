@@ -1,4 +1,4 @@
-"""Build data/universe.csv from the ticker list in the legacy notebook.
+"""Build data/universe.csv from the ticker list in the original notebook (git commit 888104c).
 
 The list is the original author's hand-typed list. It is not verified against
 any index membership. Order is preserved, the first occurrence of a duplicate
@@ -9,13 +9,15 @@ is kept, tickers keep their Yahoo Finance form (BRK-B, not BRK.B).
 import csv
 import json
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-NB = ROOT / "legacy" / "Risk_Management_and_Var_es_engine_for_stocks.ipynb"
+COMMIT = "888104c"
+NB_NAME = "Risk_Management_and_Var_es_engine_for_stocks.ipynb"
 ETFS = {"SPY", "QQQ", "DIA", "IWM", "VTI", "VOO", "IVV", "EFA", "EEM", "AGG"}
 
-nb = json.loads(NB.read_text())
+nb = json.loads(subprocess.run(["git", "show", f"{COMMIT}:{NB_NAME}"], cwd=ROOT, capture_output=True, text=True, check=True).stdout)
 src = "".join(nb["cells"][1]["source"])
 body = re.search(r"self\.tickers = \[(.*?)\n        \]", src, re.S).group(1)
 
