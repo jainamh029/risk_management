@@ -167,4 +167,10 @@ Sections A to C above describe the original repository (now in `legacy/`) and ar
 | Dashboard: every control option runs without an exception; missing data shows instructions | `test_every_control_option_runs_without_an_exception`, `test_missing_snapshot_shows_instructions_instead_of_a_traceback` | verified |
 | Dashboard: overview figures equal the results files | `test_overview_numbers_equal_the_results_files` | verified |
 | Dashboard: charts support hover and zoom; series differ by line style and marker; a data table sits behind the explorer chart | Plotly figure settings in `dashboard/app.py`; viewed in a browser during this pass (SPY explorer, portfolio and forecasting tabs); not an automated test | verified by inspection only |
-| Dashboard: visible keyboard focus and reduced-motion support | CSS in `dashboard/app.py`; not tested in a browser with keyboard navigation | not verified |
+| Dashboard: keyboard navigation and visible focus | In a browser: arrow keys moved through all six tabs; the focused tab had a solid 3px blue outline (`PROGRESS.md` section 2) | verified by inspection |
+| Dashboard: reduced-motion support | CSS rule in `dashboard/app.py`; not tested with the operating-system setting | not verified |
+| Dashboard: usable at phone width | 375px viewport: no horizontal overflow, charts 343px wide | verified by inspection |
+| The ticker list is compared with S&P 500 membership using Wikipedia | `scripts/check_sp500_membership.py`; tests in `tests/test_membership.py` | verified (the source is a third-party record, stated in the README) |
+| Comparison table in the README | generated from `results/universe_membership_summary.json`; `test_results_block_equals_what_the_results_files_produce` | verified |
+| Backtest conclusions do not change when only days of index membership are counted | pooled breach rates all days versus member days in the README table | verified |
+| Backtest results equal an independent implementation | `scripts/verify_backtest_independent.py`: 1,832 results match | verified |

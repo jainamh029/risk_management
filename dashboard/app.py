@@ -145,9 +145,12 @@ with tab_over:
         f"rank IC {ens['rank_ic_nonoverlapping']['mean']:.3f} with t statistic {ens['rank_ic_nonoverlapping']['t_stat']:.2f} over {ens['rank_ic_nonoverlapping']['n']} independent periods."
     )
     st.markdown("\n".join(lines))
+    mem = json.loads((ROOT / "results" / "universe_membership_summary.json").read_text())
     st.info(
-        "Main limitation: the ticker list is hand-typed and was never checked against real index membership, and Yahoo returned no data for "
-        f"{len(meta['tickers_failed'])} of its tickers (mostly names that left the market). Survivorship bias is present and its size is not measured."
+        "Main limitation: the ticker list is hand-typed and is not the S&P 500. Compared with Wikipedia's record of index membership, "
+        f"{mem['current_members_in_list']} of its {mem['stocks_in_list']} stocks are current members, {len(mem['current_members_not_in_list'])} current members are missing from it, "
+        f"and Yahoo returned no data for {len(meta['tickers_failed'])} of its tickers (mostly names that left the market). "
+        f"Counting only days when each stock was a member does not change the backtest conclusions, but survivorship bias remains and its size is not measured."
     )
 
 # ----------------------------------------------------------------------------- VaR explorer
@@ -432,7 +435,7 @@ with tab_help:
             st.write(v)
     st.subheader("Limits to keep in mind")
     st.markdown(
-        "- The ticker list is hand-typed and not checked against index membership; names that left the market are missing.\n"
+        "- The ticker list is hand-typed and is not the S&P 500 (see the Overview and the README comparison with Wikipedia's membership record); names that left the market are missing.\n"
         "- Prices are Yahoo Finance adjusted closes, used as downloaded.\n"
         "- A 99% VaR from a 250-day window rests on about 2.5 days in the tail, so it is noisy.\n"
         "- The per-ticker tests are not independent of each other.\n"

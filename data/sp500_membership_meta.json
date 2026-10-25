@@ -1,0 +1,19 @@
+{
+  "sources": [
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+      "revision_id": "1381923657",
+      "last_edited": "25 October 2026"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Historical_components_of_the_S%26P_500",
+      "revision_id": "1379179365",
+      "last_edited": "8 October 2026"
+    }
+  ],
+  "fetched_utc": "2026-10-25T17:14:40Z",
+  "current_constituents_rows": 503,
+  "changes_rows": 412,
+  "license": "Wikipedia text is CC BY-SA 4.0; only tickers, dates and reasons are stored",
+  "note": "Wikipedia is not the official S&P Dow Jones Indices record"
+}

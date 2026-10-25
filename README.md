@@ -63,6 +63,33 @@ Pooled models trained on 94,371 samples (feature dates 2019-07-10 to 2023-09-25;
 
 Share of test samples with a positive 63-day return: 57.5%.
 
+### Ticker list compared with S&P 500 membership
+
+Source: Wikipedia's current constituents (revision 1381923657) and table of index changes (revision 1379179365), fetched 2026-10-25T17:14:40Z. This is a volunteer-maintained record, not S&P Dow Jones Indices' own. Membership on a past date is rebuilt by undoing each recorded change from today's list; the rebuilt index has between 503 and 508 members on every date of the price window, as a complete table would give.
+
+| Item | Value |
+|---|---|
+| Tickers in the list | 483 (473 stocks, 10 ETFs) |
+| Stocks that are index members today | 412 of 473 |
+| Stocks that were members on every date of the price window | 357 |
+| Stocks that were members on some dates only | 105 |
+| Stocks that were not members on any date, matching by symbol | 11 (5 with price data: AGL, DINO, EQR, FNF, PARA) |
+| Current index members that are not in the list | 91 |
+| Index members with price data in this snapshot | 74.9% on 2019-01-02, 81.9% on 2026-10-23, 82.9% on average |
+| Backtested forecast days on which the stock was an index member | 95.0% of 762,007 |
+| Source tables that contradict each other | SATS |
+
+Pooled breach rate over all backtested days, and over only the days when the stock was an index member:
+
+| Method | Confidence | All days | Member days only | Expected |
+|---|---|---|---|---|
+| historical | 95% | 5.696% | 5.685% | 5.00% |
+| historical | 99% | 1.588% | 1.583% | 1.00% |
+| normal | 95% | 4.626% | 4.636% | 5.00% |
+| normal | 99% | 1.938% | 1.934% | 1.00% |
+
+Matching is by ticker symbol. A company that changed its symbol cannot be matched, so some of the stocks counted as non-members are renamed members; the history table itself records, for example, HFC (the earlier symbol of DINO) as a member until 2021-06-04, and describes Equity Residential as renamed. These were not resolved.
+
 <!-- RESULTS:END -->
 
 All numbers above are written by `scripts/make_readme_tables.py` from the files in `results/`, which `scripts/run_pipeline.py` writes from the downloaded data. A test fails if this block and the results files disagree.
@@ -95,7 +122,7 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 
 ## Limitations
 
-- The ticker list is hand-typed and was never checked against any index membership. It mixes names from different years, and Yahoo Finance returns no data for some of them (listed in `data/prices_meta.json`). Stocks that left the market are therefore missing from the data. The size and direction of the resulting bias are not measured.
+- The ticker list is hand-typed and is not the S&P 500. The comparison table above (Wikipedia's record of membership, not S&P's own) shows how it differs: some current members are missing, some listed stocks were members for only part of the window, and a few matched by symbol are not members at all. It also mixes names from different years, and Yahoo Finance returns no data for some of them (listed in `data/prices_meta.json`), so stocks that left the market are missing. The backtest conclusions do not change when only member days are counted, but the portfolio and forecasting results use whichever stocks were in the list, and the size of the resulting bias is not measured.
 - Adjusted prices from Yahoo Finance are not point-in-time and are used as downloaded. The only checks are those in `data/prices_meta.json` and the tests.
 - A 99% VaR from a 250-day window rests on about 2.5 days in the tail, so it is a noisy estimate.
 - The per-ticker Kupiec tests are not independent of each other, and the share rejected is not a formal test.
@@ -111,21 +138,23 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/fetch_data.py
 python scripts/run_pipeline.py
+python scripts/verify_backtest_independent.py
+python scripts/check_sp500_membership.py
 python scripts/make_readme_tables.py
 pytest -q
 ```
 
-`scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
+`scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
 | `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/ml.py`, `riskengine/config.py` |
-| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `dashboard/app.py` |
+| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py`, `dashboard/app.py` |
 | `tests/` | tests on the real downloaded data; they fail with a clear message if the snapshot is missing |
 | `results/` | files written by the pipeline |
-| `data/` | `data/universe.csv`, `data/prices_meta.json`; the price file `data/prices.parquet` is git-ignored |
+| `data/` | `data/universe.csv`, `data/prices_meta.json`, `data/sp500_current.csv`, `data/sp500_changes.csv`, `data/sp500_membership_meta.json`; the price file `data/prices.parquet` is git-ignored |
 | `legacy/` | the original README, kept for the audit trail; the original notebook is in git history (commit `888104c`) and is superseded by the code above |
 | `AUDIT.md`, `CLAIMS.md`, `FORMULAS.md`, `PROGRESS.md`, `DECISIONS.md` | the review of the original notebook, the register of every formula and the test that checks it, and the record of what was changed |
 

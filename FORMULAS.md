@@ -81,6 +81,20 @@ Conventions used throughout: daily simple returns; 252 trading days per year; sa
 | Latest forecast | features at the last date; final model trained on samples whose target window has ended | `test_latest_forecast_uses_features_from_the_last_date` |
 | No intervals or signals | none produced | `test_no_intervals_or_trading_signals_are_produced` |
 
+## Membership cross-check (`scripts/check_sp500_membership.py`)
+
+| Item | Definition | Test |
+|---|---|---|
+| Membership on date d | start from today's constituents; for every recorded change effective after d, remove the ticker that was added and restore the ticker that was removed | `test_every_dated_change_flips_membership_on_its_effective_date` (for every change in the window, checked against the day before and the first trading day on or after the effective date), `test_last_day_membership_is_exactly_the_current_list`, `test_known_membership_facts_from_the_stored_tables` |
+| Table completeness | the rebuilt index size stays between 500 and 510 on every date | `test_rebuilt_index_size_stays_near_500_on_every_date` |
+| No dropped rows | every row of the changes table is kept; the latest change (2026-10-06) is present | `test_no_change_row_was_dropped_while_parsing` |
+| Contradictions in the source | tickers added since the window start, absent from today's list, never recorded as removed | `test_source_inconsistencies_are_reported_not_hidden` |
+| Stored results | equal a fresh analysis of the stored tables | `test_stored_membership_results_equal_a_fresh_analysis`, `test_summary_counts_are_consistent` |
+
+## Independent backtest verification (`scripts/verify_backtest_independent.py`)
+
+Recomputes, with plain loops and no package code, every forecast, breach count, Kupiec statistic (from the binomial log-pmf) and p-value for all 1,832 ticker, method and confidence combinations, and the summary table. Last run: all match.
+
 ## Approximations and conventions that are not errors
 
 - Mean annual return is the arithmetic mean times 252; CAGR is shown beside it.

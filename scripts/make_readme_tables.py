@@ -154,6 +154,42 @@ def build() -> str:
         )
     )
     parts.append("\nShare of test samples with a positive %d-day return: %s." % (mi["horizon_trading_days"], pct(b["share_of_test_samples_with_positive_return"], 1)))
+    mem = json.loads((res / "universe_membership_summary.json").read_text())
+    src = mem["source"]["sources"]
+    parts.append("\n### Ticker list compared with S&P 500 membership\n")
+    parts.append(
+        f"Source: Wikipedia's current constituents (revision {src[0]['revision_id']}) and table of index changes (revision {src[1]['revision_id']}), fetched {mem['source']['fetched_utc']}. "
+        "This is a volunteer-maintained record, not S&P Dow Jones Indices' own. Membership on a past date is rebuilt by undoing each recorded change from today's list; "
+        f"the rebuilt index has between {mem['index_size_rebuilt']['min']} and {mem['index_size_rebuilt']['max']} members on every date of the price window, as a complete table would give.\n"
+    )
+    cat = mem["categories_stocks"]
+    nm = mem["not_member_with_data"]
+    cov = mem["coverage_of_index_by_price_data"]
+    parts.append(
+        table(
+            ["Item", "Value"],
+            [
+                ["Tickers in the list", f"{mem['tickers_in_list']} ({mem['stocks_in_list']} stocks, {mem['etfs_in_list']} ETFs)"],
+                ["Stocks that are index members today", f"{mem['current_members_in_list']} of {mem['stocks_in_list']}"],
+                ["Stocks that were members on every date of the price window", cat.get("member on every date", 0)],
+                ["Stocks that were members on some dates only", cat.get("member on some dates", 0)],
+                ["Stocks that were not members on any date, matching by symbol", f"{cat.get('not a member on any date', 0)} ({len(nm)} with price data: {', '.join(nm) or 'none'})"],
+                ["Current index members that are not in the list", len(mem["current_members_not_in_list"])],
+                ["Index members with price data in this snapshot", f"{pct(cov['first_date'], 1)} on {mem['window_start']}, {pct(cov['last_date'], 1)} on {mem['window_end']}, {pct(cov['mean'], 1)} on average"],
+                ["Backtested forecast days on which the stock was an index member", f"{pct(mem['backtest']['share_while_member'], 1)} of {mem['backtest']['forecast_days']:,}"],
+                ["Source tables that contradict each other", ", ".join(mem["source_inconsistencies"]["tickers"]) or "none"],
+            ],
+        )
+    )
+    rows = []
+    for r in mem["pooled_breach_rate_members_only"]:
+        rows.append([r["method"], pct(r["confidence"], 0), pct(r["breach_rate_all_days"], 3), pct(r["breach_rate_member_days_only"], 3), pct(r["expected_rate"])])
+    parts.append("\nPooled breach rate over all backtested days, and over only the days when the stock was an index member:\n")
+    parts.append(table(["Method", "Confidence", "All days", "Member days only", "Expected"], rows))
+    parts.append(
+        "\nMatching is by ticker symbol. A company that changed its symbol cannot be matched, so some of the stocks counted as non-members are renamed members; "
+        "the history table itself records, for example, HFC (the earlier symbol of DINO) as a member until 2021-06-04, and describes Equity Residential as renamed. These were not resolved."
+    )
     return "\n".join(parts)
 
 

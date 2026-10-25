@@ -15,18 +15,23 @@ Owner's ground rules: no data is created, assumed, simulated or filled in; every
 | Run the tests on the whole project and report | done (section 2) |
 | Interactive dashboard | done: `dashboard/app.py`, six tabs, tested headless and in a browser |
 | No synthetic data in the project | done: scan in section 5; original notebook removed from the working tree |
+| Test the dashboard | done: headless tests plus a full browser pass (section 2) |
+| Test the backtest | done: independent re-implementation matches all 1,832 results (section 2) |
+| Check the ticker list against S&P 500 membership | done against Wikipedia's record (section 9) |
+| Push to GitHub once everything passes | see section 10 |
 
 ## 2. Test results on the whole project (final)
 
 | Check | Result |
 |---|---|
-| `pytest tests` in the working environment | 97 passed in 96 s (backtest 13, dashboard 13, data 9, metrics 9, ML 17, portfolio 18, README and documents 9, VaR 9) |
-| Same suite in a brand-new virtual environment built only from `requirements.txt` | 97 passed (final run, below) |
+| `pytest tests` in the working environment | 106 passed in 108 s (backtest 13, dashboard 13, data 9, membership 9, metrics 9, ML 17, portfolio 18, README and documents 9, VaR 9) |
+| Same suite in a brand-new virtual environment built only from `requirements.txt` | see section 10 |
 | `scripts/run_pipeline.py` rerun in the clean environment, then `diff -rq results` against the repository | every file byte-identical (after rounding the forecast files to 10 decimals; before the rounding, `ml_latest_forecasts.csv` differed by 1.1e-16 from multithreaded floating-point summation, with the same ranking) |
 | `scripts/make_readme_tables.py --check` | README results block matches the results files |
 | `notebooks/walkthrough.ipynb` executed with nbclient | 6 code cells, 0 errors, 4 figures |
 | Dashboard, headless (Streamlit AppTest) | 13 tests: loads, overview numbers equal the results files, VaR explorer breach counts equal an independent loop, backtest filters, portfolio presets and custom screen, forecast table filters, every control option, data tables, missing-data message, no unsupported text |
-| Dashboard, live browser | opened at `localhost:8501`; Overview, VaR explorer (changed confidence to 95% and saw SPY update to 86 breaches of 1,713), Portfolio experiment and Forecasting model tabs viewed. Layout problems found and fixed: chart title overlapping legend and range buttons; misleading upward arrow on "expected" values; default portfolio preset was the one that cannot be built. The Backtest comparison and Glossary tabs were exercised by the headless tests but not looked at in the browser. The server was stopped afterwards |
+| Dashboard, live browser | opened at `localhost:8501` and used twice. First pass: Overview, VaR explorer (changed confidence to 95% and saw SPY update to 86 breaches of 1,713), Portfolio experiment and Forecasting model. Second pass: Overview with the new membership text; Backtest comparison (bars with hatching and expected marks, ticker filter returned exactly the 12 results expected for 3 tickers, p-value histogram with a pile-up near zero, sortable table); Glossary; keyboard navigation (arrow keys moved through all six tabs, focused tab had a solid 3px blue outline); phone width 375px (no horizontal overflow, chart 343px wide). Layout problems found and fixed: chart title overlapping legend and range buttons; misleading upward arrow on "expected" values; default portfolio preset was the one that cannot be built. The server was stopped afterwards |
+| Independent backtest verification | `scripts/verify_backtest_independent.py` (plain loops and `statistics.NormalDist`, no package code): recomputed every forecast, breach count, Kupiec statistic and p-value for 1,832 ticker x method x confidence results and the summary table; all match (31 s) |
 | Defect reintroduction: 21 original or likely defects put back one at a time into a scratch copy | 21 of 21 made the suite fail. Misses found along the way and fixed in the tests: screen relaxation (two boundary tests added); drawdown without starting capital (test changed to use real series where the definitions differ); a mutant that changed nothing was discarded |
 
 ## 3. Formula and logic review
@@ -67,9 +72,8 @@ Searched every tracked and working file outside `.venv` for random-number genera
 
 ## 7. Not done or not verified
 
-- The ticker list was never checked against real S&P 500 membership; the README says so.
-- Dashboard keyboard navigation and reduced-motion behaviour were set in CSS but not tested with a keyboard or the operating-system setting.
-- The Backtest comparison and Glossary tabs were not viewed in a browser.
+- Membership was compared with Wikipedia, a volunteer-maintained record, not S&P's own. Renamed symbols cannot be matched by symbol, so some stocks counted as non-members are renamed members; this was not resolved.
+- Dashboard reduced-motion behaviour is set in CSS but was not tested with the operating-system setting.
 - No independence test for VaR breaches; no multi-day VaR; no minimum-variance, risk-parity or walk-forward allocation; no Ledoit-Wolf covariance. All listed as optional features in earlier notes and not requested.
 - Commit author is the laptop default, not a GitHub address.
 
@@ -79,3 +83,15 @@ Searched every tracked and working file outside `.venv` for random-number genera
 ls -la ~/Library/Jupyter/kernels/python3     # should hold only kernel.json and three logo files
 rm -r ~/Library/Jupyter/kernels              # removes the directory created during this session
 ```
+
+## 9. Ticker list versus S&P 500 membership
+
+Source: Wikipedia's current constituents (revision 1381923657) and its table of index changes (revision 1379179365, 412 changes from 1976 to 2026-10-06), fetched 2026-10-25 and stored in `data/`. Wikipedia is not S&P's own record. Results (also in the README):
+- 483 tickers: 473 stocks and 10 ETFs. 412 of the 473 stocks are current members; 91 current members are missing from the list.
+- Over the price window (2019-01-02 to 2026-10-23): 357 stocks were members on every date, 105 on some dates, 11 on none when matched by symbol (5 of them have price data: AGL, DINO, EQR, FNF, PARA). The history table records DINO's earlier symbol HFC as a member until 2021-06-04 and describes Equity Residential as renamed, so some of these are renamed members; not resolved.
+- Price data covers 75% of the index's members on the first date and 82% on the last.
+- 95.0% of backtested forecast days fell on days when the stock was an index member. Restricting the backtest to member days changes the pooled breach rates by less than 0.02 percentage points (historical 99%: 1.588% all days, 1.583% member days), so the VaR conclusions do not depend on this.
+- The rebuilt index has 503 to 508 members on every date, consistent with a complete table.
+- The source tables contradict each other for one ticker (SATS: added 2026-03-23, absent from today's list, no removal recorded). It is not in the list.
+- A parsing bug of mine (dropping the first table row, the 2026-10-06 WBD and TWLO change) was found by checking WBD and fixed; a test now guards it.
+- Conclusion: the list is not the S&P 500. It is a hand-typed list that overlaps it heavily.
