@@ -2,6 +2,8 @@
 
 Scope: validate the implementation on branch `fix/rigor-pass` before merging into `main`. No model, analysis or feature code was changed in this stage (`git diff HEAD -- riskengine/` is empty). Nothing was pushed, no pull request was opened, no remote was changed.
 
+> **Update, final bounded repair (Part 3).** The two items left open at the end of Part 2 are now repaired: `backtest.rolling_forecasts` validates its confidence argument with the shared validator, and `ml.rank_ic_by_date` reports constant or insufficient inputs as undefined without warnings. The complete suite is now **451 tests, 451 passed, 0 failed, 0 skipped, 0 blocked, 0 warnings**, in the working environment and in a fresh virtual environment; all 12 result files and the README are byte-identical to their pre-edit copies.
+>
 > **Update, repair stage.** Part 2 at the end of this document records the bounded repair of the 16 failures reported below. After the repair the complete suite has **350 tests: 350 passed, 0 failed, 0 skipped, 0 blocked**, in the working environment and in a clean virtual environment; the stored real-data results are unchanged (except for one added status field); the independent backtest verifier still matches all 1,832 results. Sections 1 to 11 below are the original acceptance-run record and are kept unchanged as the audit trail of the 212-test run (196 passed, 16 failed).
 
 ## 1. Verdict in one paragraph
@@ -274,6 +276,8 @@ Two experiments are now kept apart and labelled as such in the test files.
 
 ## 18. Remaining failures, blockers, warnings and unverified claims
 
+*(Status after Part 3: the rolling-forecast confidence gap and the correlation warnings listed below are resolved; the rest stands.)*
+
 - **Failures: none.** 350 of 350 pass in both environments.
 - **Blocked:** none in the complete runs. The deliberate missing-snapshot run reports 105 BLOCKED and exits with status 10.
 - **Warnings (10, one cause):** `RuntimeWarning: invalid value encountered in divide` from `np.corrcoef` inside `ml.rank_ic_by_date` when the test targets are constant on a date, as in the undefined-R-squared test scenarios. The rank IC is correctly NaN there; the warning is noise. Proposed (not made): skip zero-variance dates explicitly.
@@ -284,3 +288,77 @@ Two experiments are now kept apart and labelled as such in the test files.
 
 - **No tuning and no change of evaluation:** `riskengine/config.py`, `riskengine/portfolio.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/data.py`, the universe, the training and test dates, the screens and the model settings are unchanged in this stage (`git diff 970faf1 -- <those files>` is empty). Production files changed: `riskengine/var.py` (validation), `riskengine/ml.py` (the score), `riskengine/serialize.py` (new, moved from the pipeline script), `scripts/run_pipeline.py` (uses the serialiser, prints "undefined"), `scripts/make_readme_tables.py` and `dashboard/app.py` (render an undefined score). No poorly performing method, ticker or period was excluded and no simulated data replaced an observation.
 - **Verdicts.** Software correctness checks: passed (350 of 350 in both environments, the independent verifier matches all 1,832 results, the notebook runs without error, the dashboard checks pass). Leakage controls: passed (the earlier leakage tests and the simulation checks are unchanged and still pass). What the unchanged market-performance results show: the VaR models are miscalibrated at 99% (historical 1.59% breaches against 1% expected, 69.2% of tickers rejected; normal 1.95% and 91.5%), with the Kupiec test known to be conservative for rolling forecasts; the forecasting model shows no demonstrated skill (out-of-sample R squared between -0.9% and -6.0% against the training mean, direction accuracy about 53.6% against a 57.5% baseline, rank IC 0.044 with t = 0.60 on 11 independent periods); the portfolio results beat SPY's Sharpe ratio in one period on one split and are not evidence of skill. Passing tests shows the software computes what it claims, not that any strategy has investment skill.
+
+---
+
+# Part 3. Final bounded input-validation repair
+
+Scope: two named items only. No financial method, model setting, feature, evaluation period, universe or allocation rule changed. Nothing was pushed, merged or opened as a pull request; no Git configuration or existing commit was changed (author set per commit with `-c` flags).
+
+## 20. Baseline
+
+| Item | Value |
+|---|---|
+| Branch / commit | `fix/rigor-pass`, `4ccb8bb`; working tree clean; `origin/fix/rigor-pass` still at `3b8ef2b` |
+| Frozen snapshot, SHA-256 | unchanged and re-verified before the repair, after it, and in the fresh copy: `prices.parquet` `a9a0c764...7922e`, `tbill_13w.parquet` `8deddbe7...45aba`, `prices_meta.json` `000efc57...8687`, `universe.csv` `d84ee026...5e025` (full values in section 12). Nothing was fetched. |
+| Result artifacts | copies of `results/` and `README.md` saved before any edit |
+| Baseline suite | not re-run in this stage; the last complete run of `4ccb8bb` was 350 passed (Part 2). Both defects were instead reproduced directly before any edit (below). |
+
+## 21. Defects, root causes and repairs
+
+### G-1. `backtest.rolling_forecasts` did not validate its confidence argument
+
+Reproduced before the edit (window 10, a 30-day deterministic series): the historical method accepted `conf=1.0` (it returned the maximum loss), `0.0` (the minimum), the boolean `True` (as 1) and the list `[0.95]`, and raised only for `1.5` and `nan` (from NumPy's quantile check); the normal method returned `inf` for `1.0` and `True`, `-inf` for `0.0`, `nan` for `1.5` and for `nan`, and accepted the list `[0.95]`; a string raised an obscure `UFuncTypeError` in both. Root cause: the confidence went straight to `np.quantile` or `norm.ppf`; only `kupiec_pof` validated its own argument.
+
+Repair (`riskengine/backtest.py`): `rolling_forecasts` calls the shared `var.validate_confidence` first (the same function object the public VaR functions use, so the policy lives in one place: a real scalar strictly between 0 and 1; booleans, strings, bytes, non-scalars, `None`, complex values, NaN and infinities raise `ValueError` with an explanatory message) and validates the method before any window is built, so nothing is calculated for invalid settings, including for histories shorter than the window. `backtest_series` and `backtest_universe` inherit the check because they call it. The history is deliberately **not** checked for finiteness: a window with a missing return still produces an unavailable forecast and the rest of the history is still forecast.
+
+### G-2. Constant inputs to the rank IC produced `RuntimeWarning` and an accidental NaN
+
+Reproduced: constant targets on a date raised `RuntimeWarning: invalid value encountered in divide` (shown as an error under `-W error`). Root cause: `np.corrcoef` was called on constant rank vectors.
+
+Repair (`riskengine/ml.py`, `rank_ic_by_date`): before any correlation, pairs with missing or infinite values are removed, and a date is **undefined** if it then has fewer than 10 paired observations, or the predictions are all equal, or the targets are all equal. An undefined date is omitted from the returned series (the treatment dates with too few stocks always had), with the reason recorded in `result.attrs["undefined_dates"]` (for example "constant targets across 12 stocks"); no value is substituted, no warning is emitted, and no warning filter is changed globally. Defined dates are computed exactly as before. The existing output schema has no status field for the rank IC, so none was added: the statistics already represent "undefined" as `n = 0` and null statistics (checked to serialise as JSON null), and the reason is carried on the series. A schema change would alter every `ml_summary.json` for no numerical gain; if a status field in the results files is wanted, that is a separate decision.
+
+| Case | Before | After |
+|---|---|---|
+| constant targets on a date | `RuntimeWarning`, NaN correlation silently kept | date undefined, omitted, reason recorded, no warning |
+| constant predictions on a date | same | same as above |
+| fewer than 10 finite pairs (including infinities) | infinities were ranked as values | undefined with the count in the reason |
+| ordinary non-constant dates, including tied but non-constant data | computed | computed identically |
+
+## 22. Regression tests added (101 new tests; every existing test kept, none weakened, skipped or marked xfail)
+
+| File | What it covers |
+|---|---|
+| `tests/unit/test_rolling_confidence.py` | Valid confidences (0.5 to 0.999, `np.float64`, `Fraction`) for both methods against an independent loop; breach counts against an independent loop; confidence 0 and 1, below 0, above 1, NaN, plus and minus infinity, Python and NumPy booleans, strings, bytes, lists, tuples, arrays, 0-d array, dict, `None` and complex, for both methods; the shared-helper identity and identical messages; validation happens before `sliding_window_view` is reached (patched to fail); short histories still validate; unknown methods; inheritance by `backtest_series` and `backtest_universe`; missing observations make exactly the affected windows unavailable and match the independent loop; an invalid confidence is rejected even when the history has gaps. |
+| `tests/unit/test_rank_ic_undefined.py` | Constant predictions, constant targets, both, all dates constant, fewer than 10 paired finite observations (missing and infinite values), tied but non-constant data, perfect and reversed rankings; each under `warnings.simplefilter("error")` and with `catch_warnings(record=True)` to show nothing is emitted and no global filter is changed; `ml.score` with constant targets (undefined statistics, no warning, JSON null); `ml.score` with ordinary data against `scipy.stats.spearmanr`. |
+
+Independent expected values: loops in the test files (sorted losses with linear interpolation; sample mean and `statistics.NormalDist` quantile); `scipy.stats.spearmanr` for every defined correlation; hand-known +1 and -1 for perfectly agreeing and reversed rankings.
+
+## 23. Verification and outcomes
+
+| Check | Command | Exit | Outcome |
+|---|---|---|---|
+| Focused regression tests | `pytest tests/unit/test_rolling_confidence.py tests/unit/test_rank_ic_undefined.py` | 0 | 101 passed |
+| Affected existing tests | `pytest tests/unit/test_ml_unit.py tests/unit/test_ml_score.py tests/unit/test_kupiec_backtest.py tests/integration/test_ml.py tests/integration/test_backtest.py` | 0 | 64 passed |
+| Complete suite, working environment | `pytest -q` | 0 | **451 passed, 0 failed, 0 skipped, 0 blocked, 0 errors, 0 warnings** (235 s). The 10 warnings of the previous run (all from the correlation of constant inputs) are gone. |
+| Complete suite, fresh venv | new venv from `requirements.txt`, then that interpreter: `pytest -q` | 0 | **451 passed, 0 warnings** (231 s) |
+| Cached-snapshot pipeline | `run_pipeline.py`, `check_sp500_membership.py` (offline), `make_readme_tables.py` | 0 | no fetch |
+| Independent backtest verifier | `verify_backtest_independent.py`, in the working and the fresh environment | 0 | all 1,832 results match |
+| README / result consistency | `make_readme_tables.py --check`; the F32 test (inside the 451) | 0 | README block matches the results |
+| Fresh environment pipeline | same scripts with the fresh venv | 0 | results byte-identical to the working environment |
+| Notebook (not required this round; run anyway) | `jupyter nbconvert --execute` in the fresh environment, output to a temporary directory | 0 | 6 code cells, 0 errors |
+
+## 24. Did valid-data results change?
+
+No. All **12 of 12** result files and `README.md` are byte-identical to the copies saved before the first edit, in the working environment, and the fresh environment's results are byte-identical to the working environment's. There is no artifact difference to explain: no schema was changed in this stage. The stored forecasts, breach counts, Kupiec statistics, rank ICs, portfolio results and ML results are unchanged, which also confirms that no defined, non-constant correlation changed.
+
+## 25. Completed checks, and what remains unverified
+
+Completed in this stage (each by a command that was run, above): both defects reproduced, repaired and covered by tests; full suite twice; independent verifier twice; byte comparison of every result file; README consistency; notebook.
+
+Remaining and not repaired:
+- **Infinite values inside a rolling history.** Missing returns (NaN) correctly make windows unavailable. An infinite return in the history is not treated as missing: the historical method then returns an ordinary-looking number for windows containing it and the normal method returns NaN (observed on a 30-day constructed series). I left this alone because the instruction was to preserve the missing-window policy and the data layer guarantees finite returns (test A3). Whether non-finite values should also make a window unavailable is a policy decision for you.
+- **Other arguments of the backtest functions** (for example `window`) are not validated.
+- **External-data assumptions that no test can settle:** the vendor's retroactive price adjustment (not strictly point-in-time); the accuracy of Yahoo Finance prices; Wikipedia as the membership source (the SATS contradiction, renamed symbols); and the `fetch_data.py` download step, which was not run (frozen snapshot).
+- **Not repeated in this stage:** the live browser checks (earlier stages) and dashboard reduced-motion behaviour.
+- **Empirical results are unchanged and are not evidence of skill:** VaR is miscalibrated at 99% (historical 1.59% breaches against 1% expected; normal 1.95%); the forecasting model shows no demonstrated skill (R squared against the training mean between -0.9% and -6.0%, rank IC 0.044, t = 0.60 on 11 independent periods); the portfolio results are one period on one split.

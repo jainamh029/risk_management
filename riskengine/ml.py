@@ -94,15 +94,34 @@ def ensemble_predict(rf, gb, X: np.ndarray) -> np.ndarray:
 
 
 def rank_ic_by_date(pred: pd.Series, y: pd.Series) -> pd.Series:
-    """Spearman correlation between forecast and realised return across stocks, for each date."""
-    df = pd.DataFrame({"p": pred, "y": y}).dropna()
-    out = {}
+    """Spearman correlation between forecast and realised return across stocks, for each date.
+
+    A date's correlation is undefined, and the date is omitted from the result, when after removing missing and
+    infinite values it has fewer than 10 paired observations, or when the predictions (or the targets) are all equal.
+    The check is made before any correlation is computed, so no division-by-zero warning is produced and no
+    value is invented. The reason for each omitted date is recorded in `result.attrs["undefined_dates"]`.
+    Valid, non-constant dates are computed exactly as before.
+    """
+    df = pd.DataFrame({"p": pred, "y": y}).replace([np.inf, -np.inf], np.nan).dropna()
+    out, undefined = {}, {}
     for d, g in df.groupby(level="date"):
-        if len(g) < 10:
+        n = len(g)
+        if n < 10:
+            undefined[d] = f"fewer than 10 paired finite observations ({n})"
+            continue
+        reasons = []
+        if g["p"].nunique() < 2:
+            reasons.append("constant predictions")
+        if g["y"].nunique() < 2:
+            reasons.append("constant targets")
+        if reasons:
+            undefined[d] = " and ".join(reasons) + f" across {n} stocks"
             continue
         pr, yr = g["p"].rank().to_numpy(), g["y"].rank().to_numpy()
         out[d] = float(np.corrcoef(pr, yr)[0, 1])
-    return pd.Series(out, name="rank_ic")
+    s = pd.Series(out, name="rank_ic", dtype=float)
+    s.attrs["undefined_dates"] = undefined
+    return s
 
 
 def quintile_spread_by_date(pred: pd.Series, y: pd.Series) -> pd.Series:

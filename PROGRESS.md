@@ -103,3 +103,7 @@ Full details are in `VALIDATION_REPORT.md`. Summary: 212 tests (196 passed, 16 f
 ## 12. Repair stage (bounded repair of the validation failures)
 
 Baseline `970faf1` reproduced the reported 212 tests (196 passed, 16 failed). After the repair the complete suite is 350 tests, 350 passed (working environment and a clean virtual environment), with the real-data results unchanged except for one added field (`oos_r2_status`) in `results/ml_summary.json`. See `VALIDATION_REPORT.md` Part 2. Repaired: `var.py` input validation and `ml.score`'s undefined R squared (NaN in code, null in JSON, "undefined" in README and dashboard). Remaining: `backtest.rolling_forecasts` does not validate its confidence argument; RuntimeWarnings from `np.corrcoef` on constant targets. Nothing was pushed.
+
+## 13. Final bounded repair (rolling-forecast confidence, undefined rank IC)
+
+Baseline `4ccb8bb`. Both defects were reproduced, repaired and covered by 101 new tests. The complete suite is 451 tests, 451 passed, 0 warnings, in the working environment and in a fresh virtual environment; the independent verifier matches all 1,832 results; all 12 result files and the README are byte-identical to the pre-edit copies. See `VALIDATION_REPORT.md` Part 3. Left as decisions for the owner: whether infinite returns inside a rolling history should make windows unavailable, and whether the rank-IC status should be stored in the results files. Nothing was pushed.

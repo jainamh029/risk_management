@@ -13,7 +13,7 @@ import pandas as pd
 from numpy.lib.stride_tricks import sliding_window_view
 from scipy.stats import chi2, norm
 
-from .var import METHODS
+from .var import METHODS, validate_confidence
 
 
 def kupiec_pof(n: int, x: int, p: float) -> tuple[float, float]:
@@ -38,7 +38,16 @@ def kupiec_pof(n: int, x: int, p: float) -> tuple[float, float]:
 
 
 def rolling_forecasts(returns: np.ndarray, window: int, conf: float, method: str) -> np.ndarray:
-    """VaR forecast for each day using the previous `window` returns. NaN where unavailable."""
+    """VaR forecast for each day using the previous `window` returns. NaN where unavailable.
+
+    The confidence level and the method are validated before anything is calculated, with the same rules as the
+    public VaR functions (a real scalar strictly between 0 and 1; booleans, strings, non-scalars, NaN and infinities
+    raise ValueError). The history itself is NOT required to be finite: a window that contains a missing return
+    simply has no forecast, and the other windows of the same history are still forecast.
+    """
+    c = validate_confidence(conf)
+    if method not in METHODS:
+        raise ValueError(f"unknown method {method!r}; choose from {METHODS}")
     r = np.asarray(returns, dtype=float)
     out = np.full(r.shape[0], np.nan)
     if r.shape[0] <= window:
@@ -46,12 +55,10 @@ def rolling_forecasts(returns: np.ndarray, window: int, conf: float, method: str
     w = sliding_window_view(r, window)[:-1]  # window ending the day before each forecast day
     ok = ~np.isnan(w).any(axis=1)
     if method == "historical":
-        f = np.quantile(-w[ok], conf, axis=1)
-    elif method == "normal":
-        z = norm.ppf(conf)
-        f = -(w[ok].mean(axis=1) - z * w[ok].std(axis=1, ddof=1))
+        f = np.quantile(-w[ok], c, axis=1)
     else:
-        raise ValueError(f"unknown method {method!r}")
+        z = norm.ppf(c)
+        f = -(w[ok].mean(axis=1) - z * w[ok].std(axis=1, ddof=1))
     idx = np.flatnonzero(ok) + window
     out[idx] = f
     return out
