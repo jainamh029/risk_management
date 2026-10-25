@@ -1,4 +1,34 @@
-# Audit: risk_management (Stage 1, audit only)
+# Audit: risk_management
+
+This document was written in Stage 1 (audit only) about the original notebook, which now lives in `legacy/`. The section directly below records how each finding was resolved in the repair stage that followed. Sections 1 to 6 are the original audit text, kept unchanged apart from the notes marked "Repair note".
+
+## Repair status of each finding
+
+All repairs use real downloaded data only. The Stage 1 script `audit/checks.py` demonstrated several defects on synthetic data; the owner's rule is that no data may be created or simulated, so that script was removed (it remains in git history, commit `47cf740`) and each finding is now guarded by tests on the real snapshot (`tests/`). The tests were checked by reintroducing 11 of the original defects one at a time into a scratch copy; all 11 made the suite fail (listed in `PROGRESS.md`).
+
+| ID | Resolution | Guarded by |
+|---|---|---|
+| B1 normal VaR sign | `riskengine/var.py` uses `-(mu - z*sigma)` | `test_normal_var_satisfies_its_defining_equation`, `test_the_original_sign_error_is_real_on_real_data` (real SPY returns) |
+| B2 sqrt(252) scaling and "annual" labels | Removed everywhere. One-day VaR and ES only; the dollar columns are gone | `test_one_day_var_is_a_plausible_fraction_not_a_scaled_number` |
+| B3 `bfill`, dead missing-data filter | No filling anywhere; returns are NaN where a price is missing; the filter is deleted. Real data: VLTO has no price before 2023-10-04 | `test_late_listed_tickers_are_not_back_filled`, `test_returns_match_an_independent_calculation`, `test_no_filled_values_in_downloaded_series` |
+| B4 ticker handling | Dashes kept (re-checked against Yahoo during repair: `BRK.B` returns nothing, `BRK-B` returns 1,964 rows). Failures are recorded with their reason in `data/prices_meta.json`. Order is the order of `data/universe.csv` | `test_dash_tickers_are_present_in_the_downloaded_data`, `test_universe_is_the_original_list_deduplicated`, `test_snapshot_metadata_matches_the_files` |
+| B5 Kupiec | Rewritten in log space, zero and full breaches computed exactly, p-values returned. The clustering score was removed. No independence test was added (see `DECISIONS.md`) | `test_kupiec_*` (reference from the binomial log-pmf, original saved values 3.441928 and 4.317578 reproduced, zero-breach closed form, large-sample stability) |
+| B6 backtest scope and labels | Historical and normal VaR are both backtested; the "best models" list is gone; results are reported as breach rates against the nominal rate and the share of tickers rejected | `test_backtest_breach_counts_match_an_independent_loop` (4 real tickers, both methods, both levels), `test_forecasts_do_not_use_the_day_they_forecast`, `test_universe_backtest_and_summary_are_consistent` |
+| B7 "Monte Carlo" and Cornish-Fisher | Monte Carlo removed. Cornish-Fisher is not implemented and is not claimed | `test_no_forbidden_claims_in_readme_or_code` |
+| B8, B9 ML module | Removed (decision D2). No ML claims remain | `test_no_forbidden_claims_in_readme_or_code`, `test_every_import_in_the_package_is_in_requirements` |
+| B10 optimizer | Unused parameters removed. Screens are never relaxed: a preset with fewer than 4 passing stocks is reported "not constructed". Holdings and weights use training data only; results are reported out-of-sample against SPY and the same holdings equal-weighted | `test_fit_ignores_everything_after_the_training_end`, `test_screens_are_never_relaxed`, `test_a_screen_with_too_few_passers_is_refused_not_relaxed`, `test_a_screen_with_exactly_the_minimum_passers_is_built_from_those_stocks`, `test_selected_stocks_meet_the_screen_by_independent_calculation`, `test_out_of_sample_numbers_match_an_independent_recalculation` |
+| B11 metric definitions | Downside deviation is the root mean square shortfall over all days. The risk-free rate comes from real 13-week T-bill yields (`^IRX`), not a fixed 4%. `LT_Score`, RSI and moving-average fields were removed. Missing 1-year returns stay missing | `test_downside_deviation_*`, `test_compute_metrics_row_matches_hand_calculation`, `test_short_histories_get_nan_not_a_substitute` |
+| B12 environment | `requirements.txt` lists every dependency with the exact tested versions; `resample('M')` is no longer used; Plotly is not used | `test_requirements_pin_the_versions_that_ran_the_tests`, `test_every_import_in_the_package_is_in_requirements`, clean-environment run (see `PROGRESS.md`) |
+| B13 reproducibility | Explicit end date, snapshot metadata with download time, pinned versions, settings fixed in `riskengine/config.py` | `test_snapshot_metadata_matches_the_files`, `test_stored_*_match_a_fresh_run` |
+| B14 hard-coded advice | Removed. The pipeline prints only numbers it just computed | `test_no_forbidden_claims_in_readme_or_code` |
+| B15 universe | The README describes it as a hand-maintained list of 483 tickers. ETFs are flagged in `results/metrics.csv` and are excluded from portfolio eligibility. Membership of the real S&P 500 was not verified and the README says so | `test_ticker_count_in_readme_matches_the_universe`, `test_only_stocks_with_a_complete_training_history_are_eligible` |
+
+New facts learned from the real download during the repair (not in the original audit):
+- Yahoo Finance returned data for 462 of 483 tickers on 2026-10-25, with 21 returning nothing even when retried one at a time (list in `data/prices_meta.json`). The saved original run had 15 failures.
+- Four tickers (AVB, EQR, EA, WBD) have exactly one valid price in the snapshot. They are excluded from every analysis that needs history, not corrected.
+- Pooled breach rates for historical VaR on this snapshot are close to those in the original saved output (5.69% and 1.59% against 5.58% and 1.60%). The share of tickers rejected differs (see the README); the two runs differ in end date, ticker set and data cleaning, and the difference was not reconciled.
+
+## Original audit text (Stage 1)
 
 Audited commit: `888104c` on `main` (local branch `fix/rigor-pass`, no source file changed).
 Files audited: `Risk_Management_and_Var_es_engine_for_stocks.ipynb` (15 cells, 8 code cells), `README.md`, `requirements.txt`. There are no tests and no CI configuration.
@@ -7,7 +37,7 @@ Files audited: `Risk_Management_and_Var_es_engine_for_stocks.ipynb` (15 cells, 8
 
 - Cell references use the 0-based notebook cell index. "Line" is the 1-based line within that cell's source. Example: "cell 3, line 39".
 - Evidence tags:
-  - **[Executed]**: I ran the original code on synthetic data, or ran a small independent calculation. Reproduce with `python3 -I audit/checks.py` from the repository root. Synthetic data is used only to test code behaviour. None of it is a market result.
+  - **[Executed]**: I ran the original code on synthetic data, or ran a small independent calculation. Repair note: this was done with `audit/checks.py`, which is no longer in the working tree because the owner ruled out synthetic data after Stage 1 (it is in commit `47cf740`). The same findings are now re-checked on real data by the tests listed above. The synthetic data was used only to test code behaviour; none of it is a market result.
   - **[Read]**: established by reading the code. Not executed.
   - **[Saved output]**: taken from the outputs saved in the notebook (cell 13, execution count 7). I did not re-run the pipeline, so these numbers are not independently reproduced.
   - **[Unverified]**: not established.

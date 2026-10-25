@@ -113,3 +113,35 @@ These are listed so they are not mistaken for verified results. All come from ce
 | Average breach rate 5.58% at 95% and 1.60% at 99% | requires execution |
 | ML "High accuracy" lines (for example SPY 72.8% with R2 -0.047) | requires execution |
 | Optimized portfolios: expected return 44.2%, 44.8%, 42.0%; Sharpe 1.61, 1.68, 1.69 (in-sample) | requires execution; in-sample by construction (B10) |
+
+## D. Claims in the rewritten README (current)
+
+Sections A to C above describe the original repository (now in `legacy/`) and are kept as the Stage 1 record. This section covers the new `README.md`. Status was assigned after the tests passed on the real snapshot; "verified" means a test on real data checks it against an independent calculation.
+
+| Claim (paraphrased from the new README) | Evidence | Status |
+|---|---|---|
+| Runs on real Yahoo Finance daily prices for a hand-maintained list of 483 tickers | `tests/test_data.py::test_universe_is_the_original_list_deduplicated`, `test_ticker_count_in_readme_matches_the_universe`, `test_every_ticker_comes_from_the_universe` | verified |
+| No data is simulated, generated or filled in | `test_no_data_is_generated_or_simulated_anywhere`, `test_no_filled_values_in_downloaded_series`, `test_late_listed_tickers_are_not_back_filled` | verified |
+| Results tables (data, backtest, SPY VaR/ES, portfolios) | `test_results_block_equals_what_the_results_files_produce`; stored results equal a fresh run (`test_stored_*_match_a_fresh_run`) | verified |
+| Daily simple returns `P_t / P_(t-1) - 1`; missing price gives missing return | `test_returns_match_an_independent_calculation` | verified |
+| Risk-free rate is the average `^IRX` yield over the window | `test_risk_free_is_the_real_tbill_series` | verified |
+| Historical VaR and ES definitions | `test_historical_var_is_the_empirical_quantile` (hand interpolation) | verified |
+| Normal VaR and ES formulas | `test_normal_var_satisfies_its_defining_equation`, `test_normal_es_matches_numerical_integration`, `test_the_original_sign_error_is_real_on_real_data` | verified |
+| No annualisation or sqrt-time scaling | `test_one_day_var_is_a_plausible_fraction_not_a_scaled_number` | verified |
+| Forecast uses only the 250 returns before the day; window with a missing return gives no forecast | `test_forecasts_do_not_use_the_day_they_forecast`, `test_late_listed_ticker_has_no_forecasts_before_a_full_window`, `test_backtest_breach_counts_match_an_independent_loop` | verified |
+| Kupiec statistic, log-space computation, `x = 0` and `x = n` handled exactly, chi-square(1) | `test_kupiec_*` | verified |
+| Descriptive statistics list and definitions | `tests/test_metrics.py` (downside deviation, drawdowns, beta, Sharpe, Sortino, Calmar, CAGR, skew, excess kurtosis, period returns, missing 1-year returns) | verified |
+| A ticker is included in an analysis only with the history it needs | `test_incomplete_windows_are_excluded_not_filled`, `test_short_histories_get_nan_not_a_substitute`, `test_universe_backtest_and_summary_are_consistent` | verified |
+| Eligible stocks: non-ETF with a return on every training day | `test_only_stocks_with_a_complete_training_history_are_eligible` | verified |
+| Screens on training-window statistics; best by training Sharpe kept | `test_selected_stocks_meet_the_screen_by_independent_calculation`, `test_selected_stocks_are_the_best_training_sharpe_among_those_passing` | verified |
+| Long-only weights maximising the training Sharpe within position bounds, from the sample mean and covariance | `test_constructed_portfolios_respect_every_constraint`, `test_optimiser_beats_equal_weight_on_the_training_sharpe`, `test_weights_are_a_local_optimum_of_the_training_sharpe` | verified (local optimality only; global optimality not claimed) |
+| A preset with too few passing stocks is reported as not constructed; the screen is never relaxed | `test_screens_are_never_relaxed`, `test_a_screen_with_too_few_passers_is_refused_not_relaxed`, `test_a_screen_with_exactly_the_minimum_passers_is_built_from_those_stocks` | verified |
+| Holdings and weights use only data up to the training end | `test_fit_ignores_everything_after_the_training_end`, `test_train_and_test_windows_do_not_overlap` | verified |
+| Test results use constant weights rebalanced daily, no transaction costs; equal-weighted column uses the same holdings | `test_out_of_sample_numbers_match_an_independent_recalculation`, `test_equal_weight_comparison_uses_the_same_holdings` | verified |
+| Interpretation paragraphs (what the backtest and portfolio numbers do and do not show) | Statements of method and caution; contain no numbers | not testable (methodological statements) |
+| Limitations list | Items about Yahoo data quality, survivorship, noisy 99% VaR (250 x 1% = 2.5 days), dependence between tickers, single split | partly verified: the 21 missing tickers and the 4 one-price tickers are in `data/prices_meta.json` and tested; the direction and size of survivorship bias is stated as not measured |
+| Reproduce commands work | Steps executed during development: `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `pytest`; clean-environment install from `requirements.txt` | verified on the author's machine (macOS, Python 3.12) |
+| `requirements.txt` pins what was tested | `test_requirements_pin_the_versions_that_ran_the_tests` | verified |
+| Every file path named in the README exists | `test_every_path_named_in_the_readme_exists` | verified |
+| Tests fail with a clear message when the snapshot is missing | Observed in the clean-environment copy (`PROGRESS.md` row 14) | verified once, not an automated test |
+| No emoji, no forbidden phrases in README and code | `test_no_forbidden_claims_in_readme_or_code`, `test_no_emoji_anywhere_in_documentation_or_code` | verified |
