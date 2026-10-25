@@ -10,12 +10,12 @@ import pandas as pd
 import pytest
 from streamlit.testing.v1 import AppTest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 APP = str(ROOT / "dashboard" / "app.py")
 
 
 @pytest.fixture()
-def app():
+def app(snapshot):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         at = AppTest.from_file(APP, default_timeout=240)

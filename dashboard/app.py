@@ -126,7 +126,7 @@ with tab_over:
             r = summ.loc[(m, c)]
             lines.append(
                 f"- {m.capitalize()} VaR at {int(c * 100)}%: breached on {pct(r['pooled_breach_rate'])} of forecast days (expected {pct(r['expected_rate'])}); "
-                f"the Kupiec test rejects {pct(r['share_rejected'], 1)} of tickers (about 5% would be rejected by chance if the model were right)."
+                f"the Kupiec test rejects {pct(r['share_rejected'], 1)} of tickers (in a simulation with a correct model the test rejected between 0% and 8% of series)."
             )
     pf = R["portfolios"]
     built = [n for n, e in pf["presets"].items() if e["status"] == "constructed"]

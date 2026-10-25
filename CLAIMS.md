@@ -121,7 +121,7 @@ Sections A to C above describe the original repository (now in `legacy/`) and ar
 | Claim (paraphrased from the new README) | Evidence | Status |
 |---|---|---|
 | Runs on real Yahoo Finance daily prices for a hand-maintained list of 483 tickers | `tests/test_data.py::test_universe_is_the_original_list_deduplicated`, `test_ticker_count_in_readme_matches_the_universe`, `test_every_ticker_comes_from_the_universe` | verified |
-| No data is simulated, generated or filled in | `test_no_data_is_generated_or_simulated_anywhere`, `test_no_filled_values_in_downloaded_series`, `test_late_listed_tickers_are_not_back_filled` | verified |
+| No data is simulated, generated or filled in | `test_no_data_is_generated_or_simulated_in_code_or_in_the_unit_and_integration_tests`, `test_no_filled_values_in_downloaded_series`, `test_late_listed_tickers_are_not_back_filled` | verified |
 | Results tables (data, backtest, SPY VaR/ES, portfolios) | `test_results_block_equals_what_the_results_files_produce`; stored results equal a fresh run (`test_stored_*_match_a_fresh_run`) | verified |
 | Daily simple returns `P_t / P_(t-1) - 1`; missing price gives missing return | `test_returns_match_an_independent_calculation` | verified |
 | Risk-free rate is the average `^IRX` yield over the window | `test_risk_free_is_the_real_tbill_series` | verified |
@@ -174,3 +174,7 @@ Sections A to C above describe the original repository (now in `legacy/`) and ar
 | Comparison table in the README | generated from `results/universe_membership_summary.json`; `test_results_block_equals_what_the_results_files_produce` | verified |
 | Backtest conclusions do not change when only days of index membership are counted | pooled breach rates all days versus member days in the README table | verified |
 | Backtest results equal an independent implementation | `scripts/verify_backtest_independent.py`: 1,832 results match | verified |
+| For rolling-window forecasts the Kupiec test is conservative: a correct model was rejected 0% to 8% of the time in simulation | `tests/statistical/test_statistical.py::test_S1_breach_rate_matches_the_exact_theory_and_kupiec_does_not_over_reject` (observed rejection 0.0%, 0.8%, 2.0%, 8.0%) | verified on simulated data |
+| The two breach-rate tables in the README have different denominators (458 tickers including 10 ETFs versus 448 stocks) and the README says so | `test_C16_pooled_rates_shares_and_every_denominator_reconcile`, `test_C16c_the_readme_labels_the_denominators_of_its_two_breach_rate_tables` | verified |
+| Portfolio test results use daily constant-weight rebalancing, not buy-and-hold | `test_E28_the_implementation_is_daily_constant_weight_rebalancing_not_buy_and_hold` (independent example: 1.125 versus 1.00) | verified |
+| Every cached backtest result equals an independent recomputation | `test_C16_every_cached_per_ticker_count_matches_an_independent_recomputation`, `test_F33_the_independent_verifier_imports_nothing_from_the_package_and_passes` | verified |

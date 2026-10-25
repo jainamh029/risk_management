@@ -148,4 +148,4 @@ def test_stored_results_match_a_fresh_run(returns):
 def config_root():
     from pathlib import Path
 
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]

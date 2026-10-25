@@ -69,6 +69,13 @@ def build() -> str:
             ]
         )
     parts.append(table(["Method", "Confidence", "Tickers", "Forecasts", "Pooled breach rate", "Expected", "Share of tickers rejected (Kupiec, 5%)", "Tickers with zero breaches"], rows))
+    _m = json.loads((res / "universe_membership_summary.json").read_text())
+    _n_all = summ[0]["n_tickers"]
+    parts.append(
+        f"\nDenominator: the {_n_all} tickers are all tickers with enough history, including {_n_all - _m['backtest']['stocks_tested']} ETFs; "
+        f"the {_m['backtest']['stocks_tested']} stocks alone account for {_m['backtest']['forecast_days']:,} of the {summ[0]['total_forecasts']:,} forecasts. "
+        "Each forecast is one ticker on one day."
+    )
 
     spy = vt[vt["ticker"] == "SPY"].iloc[0]
     parts.append("\n### Latest one-day VaR and ES for SPY (most recent %d days, ending %s)\n" % (cfg["window"], info["var_latest"]["window_end"]))
@@ -184,7 +191,11 @@ def build() -> str:
     rows = []
     for r in mem["pooled_breach_rate_members_only"]:
         rows.append([r["method"], pct(r["confidence"], 0), pct(r["breach_rate_all_days"], 3), pct(r["breach_rate_member_days_only"], 3), pct(r["expected_rate"])])
-    parts.append("\nPooled breach rate over all backtested days, and over only the days when the stock was an index member:\n")
+    parts.append(
+        f"\nPooled breach rate over all backtested days, and over only the days when the stock was an index member. Both columns use stocks only "
+        f"({mem['backtest']['stocks_tested']} stocks, {mem['backtest']['forecast_days']:,} forecasts, of which {mem['backtest']['forecast_days_while_member']:,} fall on member days), "
+        "because ETFs have no index membership; the \"All days\" column therefore differs slightly from the table above, which includes the ETFs:\n"
+    )
     parts.append(table(["Method", "Confidence", "All days", "Member days only", "Expected"], rows))
     parts.append(
         "\nMatching is by ticker symbol. A company that changed its symbol cannot be matched, so some of the stocks counted as non-members are renamed members; "

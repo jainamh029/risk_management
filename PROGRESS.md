@@ -52,7 +52,7 @@ Pooled random forest and gradient boosting (equal blend), 11 price-based feature
 ## 5. Synthetic-data scan
 
 Searched every tracked and working file outside `.venv` for random-number generation, generators and the words synthetic, simulated, fake, dummy and mock.
-- Package, scripts, tests, dashboard and notebook: no random-number generation anywhere. The only matches are the guard test's own ban list and comments that say data is not simulated. `test_no_data_is_generated_or_simulated_anywhere` enforces this.
+- Package, scripts, tests, dashboard and notebook: no random-number generation anywhere. The only matches are the guard test's own ban list and comments that say data is not simulated. `test_no_data_is_generated_or_simulated_in_code_or_in_the_unit_and_integration_tests` enforces this.
 - The original notebook contained `np.random.seed(42)` and `np.random.normal(mu, sigma, 10000)` (its "Monte Carlo" VaR). It was removed from the working tree and remains in git history (`git show 888104c:Risk_Management_and_Var_es_engine_for_stocks.ipynb`).
 - The Stage 1 audit documents quoted numbers from synthetic demonstrations. Those numbers were replaced by the same quantities measured on the real snapshot (for example: on the last 250 real SPY returns the original VaR expression gives -0.01922 at 99% against the correct +0.01815; 90 of 458 tickers had a sqrt(252)-scaled 99% VaR above 100%; 1,196 exact-zero returns would have been created for VLTO by back-filling).
 - Remaining mentions of the word "synthetic" in the documents are statements that Stage 1 used it and that it was removed.
@@ -95,3 +95,7 @@ Source: Wikipedia's current constituents (revision 1381923657) and its table of 
 - The source tables contradict each other for one ticker (SATS: added 2026-03-23, absent from today's list, no removal recorded). It is not in the list.
 - A parsing bug of mine (dropping the first table row, the 2026-10-06 WBD and TWLO change) was found by checking WBD and fixed; a test now guards it.
 - Conclusion: the list is not the S&P 500. It is a hand-typed list that overlaps it heavily.
+
+## 11. Acceptance-test stage (validation before merging into main)
+
+Full details are in `VALIDATION_REPORT.md`. Summary: 212 tests (196 passed, 16 failed, 0 skipped, 0 blocked) in the working environment and again in a clean virtual environment; an independent recomputation of all 1,832 backtest results matches; with the price snapshot removed, 103 tests report BLOCKED and the run exits with status 10. The 16 failures come from two input-validation gaps (`var.py` does not validate confidence, finiteness or sample size; `ml.score` raises `ZeroDivisionError` for a zero denominator). No model or analysis code was changed in this stage. The test directories were restructured into `tests/unit`, `tests/integration` and `tests/statistical`. The counts in section 2 above describe the earlier 106-test suite and are kept as history.

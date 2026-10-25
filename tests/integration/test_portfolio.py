@@ -237,7 +237,7 @@ def test_stored_portfolio_results_match_a_fresh_run(result):
     import json
     from pathlib import Path
 
-    stored = json.loads((Path(__file__).resolve().parents[1] / "results" / "portfolios.json").read_text())
+    stored = json.loads((Path(__file__).resolve().parents[2] / "results" / "portfolios.json").read_text())
     for name, e in result["presets"].items():
         s = stored["presets"][name]
         assert s["status"] == e["status"]

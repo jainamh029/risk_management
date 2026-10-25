@@ -1,5 +1,12 @@
-"""All tests run on the real downloaded snapshot in data/. No data is generated,
-simulated or filled in. Create the snapshot with: python scripts/fetch_data.py
+"""Shared fixtures and the BLOCKED reporting rule.
+
+tests/unit         deterministic hand-constructed fixtures; no market data, no network.
+tests/integration  the cached real-price snapshot in data/.
+tests/statistical  simulation experiments on explicitly synthetic fixtures (marker: statistical).
+
+If the price snapshot is missing, every test that needs it is reported as BLOCKED
+(a skip whose reason starts with "BLOCKED") and the whole run exits with status 10,
+so a missing snapshot can never look like a pass. Nothing is downloaded.
 """
 import sys
 from pathlib import Path
@@ -11,13 +18,31 @@ sys.path.insert(0, str(ROOT))
 
 from riskengine import data  # noqa: E402
 
+_blocked = []
+
+
+def pytest_runtest_logreport(report):
+    if report.skipped and isinstance(report.longrepr, tuple) and "BLOCKED" in str(report.longrepr[-1]):
+        _blocked.append(report.nodeid)
+
+
+def pytest_terminal_summary(terminalreporter):
+    if _blocked:
+        terminalreporter.section("BLOCKED")
+        terminalreporter.write_line(f"{len(_blocked)} test(s) could not run because the price snapshot is missing. Nothing was downloaded. Create it with: python scripts/fetch_data.py")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if _blocked:
+        session.exitstatus = 10
+
 
 @pytest.fixture(scope="session")
 def snapshot():
     try:
         prices, rf, meta = data.load_snapshot()
     except FileNotFoundError as e:
-        pytest.exit(f"{e}", returncode=2)
+        pytest.skip(f"BLOCKED: {e}")
     return prices, rf, meta
 
 

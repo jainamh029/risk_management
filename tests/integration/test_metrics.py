@@ -87,7 +87,7 @@ def test_stored_metrics_match_a_fresh_run(prices, returns, rf):
     import pandas as pd
     from pathlib import Path
 
-    stored = pd.read_csv(Path(__file__).resolve().parents[1] / "results" / "metrics.csv").set_index("ticker")
+    stored = pd.read_csv(Path(__file__).resolve().parents[2] / "results" / "metrics.csv").set_index("ticker")
     fresh = metrics.compute_metrics(prices, returns, data.risk_free_annual(rf)).set_index("ticker")
     assert set(stored.index) == set(fresh.index)
     for col in ("sharpe", "sortino", "annual_vol", "max_drawdown", "cagr"):

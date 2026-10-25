@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="session")
@@ -99,7 +99,7 @@ def test_known_membership_facts_from_the_stored_tables(matrix):
     assert not matrix["TWLO"].loc[:"2026-10-05"].any() and matrix["TWLO"].loc["2026-10-06":].all()
 
 
-def test_stored_membership_results_equal_a_fresh_analysis(mod, tmp_path, monkeypatch, capsys):
+def test_stored_membership_results_equal_a_fresh_analysis(mod, prices, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(mod, "RES", tmp_path)
     for f in ("var_backtest_by_ticker.csv",):
         (tmp_path / f).write_bytes((ROOT / "results" / f).read_bytes())

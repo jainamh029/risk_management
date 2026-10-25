@@ -1,6 +1,6 @@
 # risk_management
 
-Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR backtesting, descriptive risk statistics, a train/test portfolio experiment, and an out-of-sample test of a machine-learning forecast of the 63-day return, with an interactive dashboard. Everything runs on real daily prices downloaded from Yahoo Finance for a hand-maintained list of 483 tickers. No data is simulated, generated or filled in.
+Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR backtesting, descriptive risk statistics, a train/test portfolio experiment, and an out-of-sample test of a machine-learning forecast of the 63-day return, with an interactive dashboard. Every result comes from real daily prices downloaded from Yahoo Finance for a hand-maintained list of 483 tickers. No data is simulated, generated or filled in. The test suite also uses small hand-constructed fixtures (`tests/unit`) and simulated series (`tests/statistical`); these exist only inside tests and are never written to `data/` or `results/`.
 
 ## Results
 
@@ -26,6 +26,8 @@ Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR ba
 | historical | 99% | 458 | 779,137 | 1.59% | 1.00% | 69.2% | 0 |
 | normal | 95% | 458 | 779,137 | 4.64% | 5.00% | 15.1% | 0 |
 | normal | 99% | 458 | 779,137 | 1.95% | 1.00% | 91.5% | 0 |
+
+Denominator: the 458 tickers are all tickers with enough history, including 10 ETFs; the 448 stocks alone account for 762,007 of the 779,137 forecasts. Each forecast is one ticker on one day.
 
 ### Latest one-day VaR and ES for SPY (most recent 250 days, ending 2026-10-23)
 
@@ -79,7 +81,7 @@ Source: Wikipedia's current constituents (revision 1381923657) and table of inde
 | Backtested forecast days on which the stock was an index member | 95.0% of 762,007 |
 | Source tables that contradict each other | SATS |
 
-Pooled breach rate over all backtested days, and over only the days when the stock was an index member:
+Pooled breach rate over all backtested days, and over only the days when the stock was an index member. Both columns use stocks only (448 stocks, 762,007 forecasts, of which 723,873 fall on member days), because ETFs have no index membership; the "All days" column therefore differs slightly from the table above, which includes the ETFs:
 
 | Method | Confidence | All days | Member days only | Expected |
 |---|---|---|---|---|
@@ -96,7 +98,7 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 
 ### How to read the results
 
-- **Backtest.** A VaR model is calibrated if the share of days with a loss larger than the VaR is close to one minus the confidence level. The Kupiec test asks whether the observed number of such days is consistent with that rate. It is run for each ticker separately. If a model were correct, about 5% of tickers would be rejected by chance at the 5% level; tickers move together, so that figure is approximate. A share of rejections far above 5% means the model's breach rate differs from nominal for more tickers than chance explains.
+- **Backtest.** A VaR model is calibrated if the share of days with a loss larger than the VaR is close to one minus the confidence level. The Kupiec test asks whether the observed number of such days is consistent with that rate. It is run for each ticker separately. Rolling-window forecasts share data from day to day, so their breach counts vary less than independent trials would, and the test is conservative: in a simulation with correct i.i.d. data (`tests/statistical`) it rejected between 0% and 8% of series, depending on method and confidence level. A share of rejections far above that range therefore means the model's breach rate differs from nominal for more tickers than chance explains. Tickers move together, so the share is not a formal test.
 - **Forecasting model.** Pooled over all eligible stocks. Eleven features, each using prices up to and including the forecast day only: 5, 20, 60 and 126-day price returns, 20 and 60-day volatility, 60-day skewness and excess kurtosis, distance from the 20 and 50-day average price, and the drawdown from the 60-day high. The target is the simple return from the close on day t to the close 63 trading days later. Training uses every fifth day, and only days whose whole target window ends on or before the training end date; the test period starts after that date. The forecast is an equal blend of a random forest and gradient boosting, the same blend that is evaluated. Settings are in `riskengine/config.py` and were not tuned on the test period. Forecasts are not used by the portfolio experiment. No confidence intervals and no buy or sell labels are produced.
 
 **Portfolio experiment.** Holdings and weights are chosen using only data up to the training end date, then held fixed over the test period. The "in-sample" Sharpe ratio is measured on the data used to choose the portfolio and says nothing about the future. The test-period figures are realised results for one period and one split, for three presets, with no correction for having tried more than one. They are not evidence of future performance. The equal-weighted column uses the same holdings without the optimiser's weights.
@@ -144,6 +146,8 @@ python scripts/make_readme_tables.py
 pytest -q
 ```
 
+`pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments.
+
 `scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
 
 ## Layout
@@ -151,8 +155,9 @@ pytest -q
 | Path | Contents |
 |---|---|
 | `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/ml.py`, `riskengine/config.py` |
-| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py`, `dashboard/app.py` |
-| `tests/` | tests on the real downloaded data; they fail with a clear message if the snapshot is missing |
+| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py` |
+| `dashboard/` | `dashboard/app.py` |
+| `tests/` | `tests/unit` (hand-constructed fixtures, no market data, no network), `tests/integration` (the cached real-price snapshot and the stored results), `tests/statistical` (simulation experiments, marker `statistical`). If the snapshot is missing, every test that needs it is reported as BLOCKED and the run exits with status 10; nothing is downloaded |
 | `results/` | files written by the pipeline |
 | `data/` | `data/universe.csv`, `data/prices_meta.json`, `data/sp500_current.csv`, `data/sp500_changes.csv`, `data/sp500_membership_meta.json`; the price file `data/prices.parquet` is git-ignored |
 | `legacy/` | the original README, kept for the audit trail; the original notebook is in git history (commit `888104c`) and is superseded by the code above |
