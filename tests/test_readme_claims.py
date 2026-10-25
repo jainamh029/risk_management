@@ -9,7 +9,7 @@ README = (ROOT / "README.md").read_text()
 
 FORBIDDEN = [
     "production", "institutional", "professional", "robust", "state-of-the-art", "alpha generation",
-    "cornish", "risk parity", "min vol", "selectkbest", "machine learning", "monte carlo",
+    "cornish", "risk parity", "min vol", "selectkbest", "monte carlo",
     "efficient frontier", "heatmap", "time-series cross-validation", "badge",
 ]
 
@@ -77,10 +77,23 @@ def test_requirements_pin_the_versions_that_ran_the_tests():
 
 def test_every_import_in_the_package_is_in_requirements():
     req = {l.split("==")[0].lower().replace("_", "-") for l in (ROOT / "requirements.txt").read_text().splitlines() if "==" in l}
-    third = {"numpy", "pandas", "scipy", "yfinance", "pyarrow", "matplotlib"}
+    third = {"numpy", "pandas", "scipy", "yfinance", "pyarrow", "matplotlib", "scikit-learn", "streamlit", "plotly"}
     assert third <= req
     imported = set()
     for p in list((ROOT / "riskengine").glob("*.py")) + list((ROOT / "scripts").glob("*.py")):
         imported |= set(re.findall(r"^\s*(?:import|from)\s+(\w+)", p.read_text(), re.M))
     assert {"numpy", "pandas", "scipy"} <= imported
-    assert "sklearn" not in imported and "plotly" not in imported and "seaborn" not in imported
+    assert "seaborn" not in imported
+
+
+def test_every_test_named_in_the_documents_exists():
+    """Documents cite tests by name; a renamed or deleted test must not leave a dangling citation."""
+    import fnmatch
+
+    defined = set()
+    for f in (ROOT / "tests").glob("test_*.py"):
+        defined |= set(re.findall(r"^def (test_\w+)", f.read_text(), re.M))
+    for doc in ("AUDIT.md", "CLAIMS.md", "FORMULAS.md", "DECISIONS.md", "PROGRESS.md"):
+        text = (ROOT / doc).read_text()
+        for name in set(re.findall(r"`(test_[\w*]+)`", text)):
+            assert any(fnmatch.fnmatch(d, name) for d in defined), f"{doc} cites {name}, which does not exist"

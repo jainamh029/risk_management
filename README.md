@@ -1,6 +1,6 @@
 # risk_management
 
-Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR backtesting, descriptive risk statistics, and a train/test portfolio experiment. Everything runs on real daily prices downloaded from Yahoo Finance for a hand-maintained list of 483 tickers. No data is simulated, generated or filled in.
+Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR backtesting, descriptive risk statistics, a train/test portfolio experiment, and an out-of-sample test of a machine-learning forecast of the 63-day return, with an interactive dashboard. Everything runs on real daily prices downloaded from Yahoo Finance for a hand-maintained list of 483 tickers. No data is simulated, generated or filled in.
 
 ## Results
 
@@ -49,6 +49,20 @@ Risk-free rate used: 1.884% (training) and 4.270% (test), the average 13-week T-
 
 - conservative: 0 stocks passed the screen; at least 4 are required. The screen was not relaxed.
 
+### Forecasting the 63-day return: out-of-sample evaluation
+
+Pooled models trained on 94,371 samples (feature dates 2019-07-10 to 2023-09-25; every target window ends by 2023-12-22) and tested on 287,999 samples (feature dates 2024-01-02 to 2026-07-27). The latest forecast uses features from 2026-10-23 for 448 stocks.
+| Model | R squared vs training mean | Direction accuracy (up vs not up) | Rank IC, non-overlapping periods | Rank IC, all dates | Top-fifth minus bottom-fifth return, non-overlapping |
+|---|---|---|---|---|---|
+| random forest | -0.90% | 53.7% | 0.044 (se 0.071, t 0.62, n 11) | 0.028 | 4.72% |
+| gradient boosting | -6.03% | 53.3% | 0.044 (se 0.076, t 0.58, n 11) | 0.028 | 4.57% |
+| ensemble | -2.99% | 53.6% | 0.044 (se 0.074, t 0.60, n 11) | 0.028 | 5.27% |
+| baseline: training-mean forecast | 0.00% | 57.5% | - | - | - |
+| baseline: mom 60 momentum feature alone | - | - | -0.069 (se 0.057, t -1.20, n 11) | -0.032 | - |
+| baseline: mom 126 momentum feature alone | - | - | 0.033 (se 0.048, t 0.68, n 11) | 0.013 | - |
+
+Share of test samples with a positive 63-day return: 57.5%.
+
 <!-- RESULTS:END -->
 
 All numbers above are written by `scripts/make_readme_tables.py` from the files in `results/`, which `scripts/run_pipeline.py` writes from the downloaded data. A test fails if this block and the results files disagree.
@@ -56,7 +70,14 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 ### How to read the results
 
 - **Backtest.** A VaR model is calibrated if the share of days with a loss larger than the VaR is close to one minus the confidence level. The Kupiec test asks whether the observed number of such days is consistent with that rate. It is run for each ticker separately. If a model were correct, about 5% of tickers would be rejected by chance at the 5% level; tickers move together, so that figure is approximate. A share of rejections far above 5% means the model's breach rate differs from nominal for more tickers than chance explains.
-- **Portfolio experiment.** Holdings and weights are chosen using only data up to the training end date, then held fixed over the test period. The "in-sample" Sharpe ratio is measured on the data used to choose the portfolio and says nothing about the future. The test-period figures are realised results for one period and one split, for three presets, with no correction for having tried more than one. They are not evidence of future performance. The equal-weighted column uses the same holdings without the optimiser's weights.
+- **Forecasting model.** Pooled over all eligible stocks. Eleven features, each using prices up to and including the forecast day only: 5, 20, 60 and 126-day price returns, 20 and 60-day volatility, 60-day skewness and excess kurtosis, distance from the 20 and 50-day average price, and the drawdown from the 60-day high. The target is the simple return from the close on day t to the close 63 trading days later. Training uses every fifth day, and only days whose whole target window ends on or before the training end date; the test period starts after that date. The forecast is an equal blend of a random forest and gradient boosting, the same blend that is evaluated. Settings are in `riskengine/config.py` and were not tuned on the test period. Forecasts are not used by the portfolio experiment. No confidence intervals and no buy or sell labels are produced.
+
+**Portfolio experiment.** Holdings and weights are chosen using only data up to the training end date, then held fixed over the test period. The "in-sample" Sharpe ratio is measured on the data used to choose the portfolio and says nothing about the future. The test-period figures are realised results for one period and one split, for three presets, with no correction for having tried more than one. They are not evidence of future performance. The equal-weighted column uses the same holdings without the optimiser's weights.
+- **Forecasting.** R squared is measured against the training-mean forecast: a value below zero means the model forecasts worse than always predicting the training average. Direction accuracy is compared with the share of test samples that went up, because a model that always says "up" scores that much. Rank IC is the cross-sectional Spearman correlation between forecast and realised return on one date; neighbouring dates share most of their 63-day window, so the standard error and t statistic use only dates 63 trading days apart.
+
+## Dashboard
+
+`dashboard/app.py` reads the downloaded data and the files in `results/`. Tabs: overview, a VaR explorer (choose ticker, confidence, window and method; the forecast, breaches and Kupiec test are recomputed live), the backtest comparison with filters and a sortable table, the portfolio experiment (with optional screen sliders), the forecasting evaluation with a filterable table of the latest forecasts, and a glossary. Charts support hover and zoom, series are distinguished by line style and marker as well as colour, and every chart has a data table. Changing portfolio thresholds and then reading the test-period numbers is tuning on the test data, and the dashboard says so next to the controls.
 
 ## Method
 
@@ -78,7 +99,8 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 - Adjusted prices from Yahoo Finance are not point-in-time and are used as downloaded. The only checks are those in `data/prices_meta.json` and the tests.
 - A 99% VaR from a 250-day window rests on about 2.5 days in the tail, so it is a noisy estimate.
 - The per-ticker Kupiec tests are not independent of each other, and the share rejected is not a formal test.
-- Only one-day horizons, and only the historical and normal methods, are implemented and tested.
+- Only one-day VaR horizons, and only the historical and normal methods, are implemented and tested.
+- The forecasting test covers one train/test split and a test period of about 2.7 years, which contains only a handful of non-overlapping 63-day periods, so the rank IC inference rests on few independent observations. The features are price-based only.
 - The portfolio experiment uses one split, sample covariance, no transaction costs, and chooses stocks by past performance.
 - The risk-free rate is a proxy: the average 13-week T-bill yield over the window.
 
@@ -93,20 +115,20 @@ python scripts/make_readme_tables.py
 pytest -q
 ```
 
-`scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`.
+`scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/config.py` |
-| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py` |
+| `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/ml.py`, `riskengine/config.py` |
+| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `dashboard/app.py` |
 | `tests/` | tests on the real downloaded data; they fail with a clear message if the snapshot is missing |
 | `results/` | files written by the pipeline |
 | `data/` | `data/universe.csv`, `data/prices_meta.json`; the price file `data/prices.parquet` is git-ignored |
-| `legacy/` | the original notebook and README, kept for the audit trail and superseded by the code above |
-| `AUDIT.md`, `CLAIMS.md`, `PROGRESS.md`, `DECISIONS.md` | the review of the original notebook and the record of what was changed |
+| `legacy/` | the original README, kept for the audit trail; the original notebook is in git history (commit `888104c`) and is superseded by the code above |
+| `AUDIT.md`, `CLAIMS.md`, `FORMULAS.md`, `PROGRESS.md`, `DECISIONS.md` | the review of the original notebook, the register of every formula and the test that checks it, and the record of what was changed |
 
 ## Disclaimer
 
-Educational research code. It is not investment advice, and nothing here recommends buying or selling any security.
+Educational research code. It is not investment advice, and nothing here recommends buying or selling any security. The latest forecasts in `results/ml_latest_forecasts.csv` are model outputs whose out-of-sample accuracy is reported above; they are not recommendations.

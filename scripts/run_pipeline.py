@@ -17,7 +17,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from riskengine import backtest, config, data, metrics, portfolio, var  # noqa: E402
+from riskengine import backtest, config, data, metrics, ml, portfolio, var  # noqa: E402
 
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
@@ -71,7 +71,18 @@ mt.to_csv(OUT / "metrics.csv", index=False)
 pf = portfolio.build_and_evaluate(returns, prices, is_etf, rf_train, rf_test)
 dump("portfolios.json", pf)
 
-# 5. run information
+# 5. machine-learning forecast of the 63-day return, evaluated out of sample
+import warnings  # noqa: E402
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    mlr = ml.run(prices, is_etf)
+dump("ml_summary.json", {"info": mlr["info"], "models": mlr["models"], "baselines": mlr["baselines"]})
+mlr["ic_by_date"].to_csv(OUT / "ml_rank_ic_by_date.csv")
+mlr["latest"].to_csv(OUT / "ml_latest_forecasts.csv", index=False, float_format="%.10f")  # rounded: multithreaded sums differ in the last digit
+mlr["importance"].to_csv(OUT / "ml_feature_importance.csv", float_format="%.10f")
+
+# 6. run information
 info = {
     "config": {
         "window": config.WINDOW,
@@ -112,3 +123,5 @@ print(f"backtest: {bt['ticker'].nunique()} tickers")
 print(summ[["method", "confidence", "n_tickers", "pooled_breach_rate", "expected_rate", "share_rejected", "zero_breach_tickers"]].to_string(index=False))
 for k, v in pf["presets"].items():
     print(k, v["status"], v.get("reason", ""))
+for k, v in mlr["models"].items():
+    print(f"ml {k}: oos R2 vs training mean {v['oos_r2_vs_training_mean']:.4f}, direction {v['direction_accuracy']:.4f}, rank IC (non-overlapping) {v['rank_ic_nonoverlapping']['mean']:.4f} (t={v['rank_ic_nonoverlapping']['t_stat']:.2f})")

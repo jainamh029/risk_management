@@ -119,6 +119,41 @@ def build() -> str:
     )
     if reasons:
         parts.append("\n" + "\n".join(reasons))
+    ml = json.loads((res / "ml_summary.json").read_text())
+    mi = ml["info"]
+    parts.append(
+        "\n### Forecasting the %d-day return: out-of-sample evaluation\n" % mi["horizon_trading_days"]
+    )
+    parts.append(
+        "Pooled models trained on %s samples (feature dates %s to %s; every target window ends by %s) and tested on %s samples (feature dates %s to %s). "
+        "The latest forecast uses features from %s for %d stocks."
+        % (f"{mi['train_samples']:,}", mi["train_first_feature_date"], mi["train_last_feature_date"], mi["train_last_target_end_date"], f"{mi['test_samples']:,}", mi["test_first_feature_date"], mi["test_last_feature_date"], mi["latest_feature_date"], mi["latest_forecasts"])
+    )
+    b = ml["baselines"]
+    rows = []
+    for name, m in ml["models"].items():
+        ic = m["rank_ic_nonoverlapping"]
+        rows.append(
+            [
+                name.replace("_", " "),
+                pct(m["oos_r2_vs_training_mean"]),
+                pct(m["direction_accuracy"], 1),
+                f"{ic['mean']:.3f} (se {ic['std_error']:.3f}, t {ic['t_stat']:.2f}, n {ic['n']})",
+                f"{m['rank_ic_all_dates']['mean']:.3f}",
+                pct(m["quintile_spread_nonoverlapping"]["mean"], 2),
+            ]
+        )
+    rows.append(["baseline: training-mean forecast", "0.00%", pct(b["training_mean_forecast"]["direction_accuracy"], 1), "-", "-", "-"])
+    for f in ("mom_60", "mom_126"):
+        ic = b[f"rank_ic_{f}_nonoverlapping"]
+        rows.append([f"baseline: {f.replace('_', ' ')} momentum feature alone", "-", "-", f"{ic['mean']:.3f} (se {ic['std_error']:.3f}, t {ic['t_stat']:.2f}, n {ic['n']})", f"{b[f'rank_ic_{f}_all_dates']['mean']:.3f}", "-"])
+    parts.append(
+        table(
+            ["Model", "R squared vs training mean", "Direction accuracy (up vs not up)", "Rank IC, non-overlapping periods", "Rank IC, all dates", "Top-fifth minus bottom-fifth return, non-overlapping"],
+            rows,
+        )
+    )
+    parts.append("\nShare of test samples with a positive %d-day return: %s." % (mi["horizon_trading_days"], pct(b["share_of_test_samples_with_positive_return"], 1)))
     return "\n".join(parts)
 
 
