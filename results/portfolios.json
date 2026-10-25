@@ -1,0 +1,210 @@
+{
+  "train_start": "2019-01-03",
+  "train_end": "2023-12-29",
+  "test_start": "2024-01-02",
+  "test_end": "2026-10-23",
+  "risk_free_train": 0.018844173310042487,
+  "risk_free_test": 0.042701203921023584,
+  "eligible_stocks": 436,
+  "benchmark_spy_test": {
+    "n_days": 706,
+    "start": "2024-01-02",
+    "end": "2026-10-23",
+    "mean_annual_return": 0.19091426571295128,
+    "annual_vol": 0.15445323888788298,
+    "sharpe": 0.9595982762104134,
+    "total_return": 0.6512169278489737,
+    "max_drawdown": -0.18755237333914432,
+    "hist_var_95_1d": 0.01447547591691753,
+    "hist_es_95_1d": 0.02173848611122781,
+    "hist_var_99_1d": 0.02570903044958276,
+    "hist_es_99_1d": 0.03625537881549254
+  },
+  "presets": {
+    "conservative": {
+      "preset": {
+        "min_sharpe": 0.5,
+        "min_max_drawdown": -0.2,
+        "max_hist_var99_1d": 0.02204792759220492,
+        "min_return_1y": null,
+        "max_stocks": 10,
+        "bounds": [
+          0.05,
+          0.25
+        ]
+      },
+      "n_passing_screen": 0,
+      "n_selected": 0,
+      "status": "not_constructed",
+      "reason": "0 stocks passed the screen; at least 4 are required. The screen was not relaxed."
+    },
+    "balanced": {
+      "preset": {
+        "min_sharpe": 0.3,
+        "min_max_drawdown": -0.3,
+        "max_hist_var99_1d": 0.028347335475692043,
+        "min_return_1y": null,
+        "max_stocks": 12,
+        "bounds": [
+          0.02,
+          0.3
+        ]
+      },
+      "n_passing_screen": 6,
+      "n_selected": 6,
+      "status": "constructed",
+      "tickers": [
+        "COR",
+        "PG",
+        "WMT",
+        "PEP",
+        "BRK-B",
+        "CL"
+      ],
+      "weights": {
+        "COR": 0.3,
+        "PG": 0.21165252430037773,
+        "WMT": 0.3,
+        "PEP": 0.02,
+        "BRK-B": 0.14834747569962248,
+        "CL": 0.02
+      },
+      "in_sample_train": {
+        "n_days": 1257,
+        "start": "2019-01-03",
+        "end": "2023-12-29",
+        "mean_annual_return": 0.1858521694959375,
+        "annual_vol": 0.1813324851853782,
+        "sharpe": 0.9210042867672656,
+        "total_return": 1.3285194565358607,
+        "max_drawdown": -0.19760645599436677,
+        "hist_var_95_1d": 0.015522005106172621,
+        "hist_es_95_1d": 0.024715694006479712,
+        "hist_var_99_1d": 0.02764706505499717,
+        "hist_es_99_1d": 0.04456666427675339
+      },
+      "out_of_sample_test": {
+        "n_days": 706,
+        "start": "2024-01-02",
+        "end": "2026-10-23",
+        "mean_annual_return": 0.2048352233255667,
+        "annual_vol": 0.14207307549493184,
+        "sharpe": 1.1412015882652369,
+        "total_return": 0.7252750130008807,
+        "max_drawdown": -0.16460447873141282,
+        "hist_var_95_1d": 0.01304956635558723,
+        "hist_es_95_1d": 0.01915271839160782,
+        "hist_var_99_1d": 0.021090868603394954,
+        "hist_es_99_1d": 0.030795042419299763
+      },
+      "equal_weight_same_holdings_test": {
+        "n_days": 706,
+        "start": "2024-01-02",
+        "end": "2026-10-23",
+        "mean_annual_return": 0.1439762252569887,
+        "annual_vol": 0.1337536945671054,
+        "sharpe": 0.7571755057962496,
+        "total_return": 0.4597180116144479,
+        "max_drawdown": -0.14425756249493638,
+        "hist_var_95_1d": 0.013232933664578546,
+        "hist_es_95_1d": 0.017250643865819135,
+        "hist_var_99_1d": 0.018237640946213163,
+        "hist_es_99_1d": 0.024468382689878953
+      },
+      "test_ticker_days_without_return": 0
+    },
+    "aggressive": {
+      "preset": {
+        "min_sharpe": 0.1,
+        "min_max_drawdown": null,
+        "max_hist_var99_1d": null,
+        "min_return_1y": 0.05,
+        "max_stocks": 15,
+        "bounds": [
+          0.02,
+          0.3
+        ]
+      },
+      "n_passing_screen": 258,
+      "n_selected": 15,
+      "status": "constructed",
+      "tickers": [
+        "NVDA",
+        "PWR",
+        "LLY",
+        "SNPS",
+        "CDNS",
+        "AAPL",
+        "COST",
+        "MCK",
+        "TSLA",
+        "ODFL",
+        "KLAC",
+        "CMG",
+        "AVGO",
+        "AJG",
+        "AMD"
+      ],
+      "weights": {
+        "NVDA": 0.039507826271411424,
+        "PWR": 0.1809305675958117,
+        "LLY": 0.2901059872539742,
+        "SNPS": 0.02000000000000002,
+        "CDNS": 0.020000000000000174,
+        "AAPL": 0.02000000000000004,
+        "COST": 0.02,
+        "MCK": 0.1452037225194799,
+        "TSLA": 0.08978405885812601,
+        "ODFL": 0.020000000000000028,
+        "KLAC": 0.02,
+        "CMG": 0.07446783750119686,
+        "AVGO": 0.020000000000000052,
+        "AJG": 0.02000000000000001,
+        "AMD": 0.02
+      },
+      "in_sample_train": {
+        "n_days": 1257,
+        "start": "2019-01-03",
+        "end": "2023-12-29",
+        "mean_annual_return": 0.4366305654705084,
+        "annual_vol": 0.2353685983069883,
+        "sharpe": 1.7750302936144111,
+        "total_return": 6.67578347379185,
+        "max_drawdown": -0.3018933416868844,
+        "hist_var_95_1d": 0.02104036080797956,
+        "hist_es_95_1d": 0.03299779607061833,
+        "hist_var_99_1d": 0.03757761157777037,
+        "hist_es_99_1d": 0.055201084823668936
+      },
+      "out_of_sample_test": {
+        "n_days": 706,
+        "start": "2024-01-02",
+        "end": "2026-10-23",
+        "mean_annual_return": 0.3138391571733808,
+        "annual_vol": 0.20542303703834341,
+        "sharpe": 1.3199004218876764,
+        "total_return": 1.2704315625273854,
+        "max_drawdown": -0.1768069572651213,
+        "hist_var_95_1d": 0.017872790017689467,
+        "hist_es_95_1d": 0.02738468509038004,
+        "hist_var_99_1d": 0.03402773688081532,
+        "hist_es_99_1d": 0.04119233217485281
+      },
+      "equal_weight_same_holdings_test": {
+        "n_days": 706,
+        "start": "2024-01-02",
+        "end": "2026-10-23",
+        "mean_annual_return": 0.2844954654564806,
+        "annual_vol": 0.22339671947018078,
+        "sharpe": 1.0823536805236387,
+        "total_return": 1.06947470917852,
+        "max_drawdown": -0.21851750030113748,
+        "hist_var_95_1d": 0.020687716277152525,
+        "hist_es_95_1d": 0.030511500491527524,
+        "hist_var_99_1d": 0.03933190471779738,
+        "hist_es_99_1d": 0.04637817852356507
+      },
+      "test_ticker_days_without_return": 0
+    }
+  }
+}
