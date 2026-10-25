@@ -117,9 +117,15 @@ def test_E28_the_implementation_is_daily_constant_weight_rebalancing_not_buy_and
 
 
 def test_E28b_readme_describes_the_implemented_convention():
+    import re
+
     text = (ROOT / "README.md").read_text()
     assert "constant weights, rebalanced daily" in text
-    assert "buy-and-hold" not in text.lower()
+    assert "rebalanced back to those target weights every day" in text  # the evaluation convention is stated unambiguously
+    # the README may mention buy-and-hold only to deny it: every occurrence must be negated
+    mentions = [m.start() for m in re.finditer("buy-and-hold", text.lower())]
+    assert mentions and all(text.lower()[max(0, i - 4) : i] == "not " for i in mentions)
+    assert "held fixed over the test period" not in text  # wording that could be read as buy-and-hold
 
 
 # ------------------------------------------------------------------ E29 performance figures

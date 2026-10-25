@@ -95,6 +95,26 @@ Conventions used throughout: daily simple returns; 252 trading days per year; sa
 
 Recomputes, with plain loops and no package code, every forecast, breach count, Kupiec statistic (from the binomial log-pmf) and p-value for all 1,832 ticker, method and confidence combinations, and the summary table. Last run: all match.
 
+## Input contract and undefined scores (repair stage)
+
+| Item | Rule | Test |
+|---|---|---|
+| VaR/ES confidence | a real scalar, finite, strictly between 0 and 1; booleans rejected; otherwise `ValueError` | `test_invalid_confidence_raises_value_error_with_an_explanation` (19 invalid values, both methods), `test_the_direct_entry_points_validate_too` |
+| VaR/ES returns | real numeric, one-dimensional, at least 2 observations, all finite; complex, boolean, string, object, scalar, multidimensional, NaN and infinite inputs raise `ValueError`; nothing is dropped, filled, clipped or flattened | `test_invalid_returns_raise_value_error_with_an_explanation` (24 inputs, both methods), `test_the_returns_are_not_modified_dropped_clipped_or_filled` |
+| VaR/ES method | exactly `historical` or `normal` | `test_unknown_methods_raise_value_error` |
+| Constant finite returns | valid; VaR = ES = minus the constant | `test_constant_finite_returns_are_valid_and_give_minus_the_constant` |
+| Missing windows | unavailable forecasts in the backtest layer, exclusions in `latest_var_table`; never an error and never a filled value | `test_a_missing_return_in_a_window_remains_an_unavailable_forecast_not_an_error`, `test_latest_var_table_excludes_an_incomplete_window_instead_of_raising_or_filling` |
+| Out-of-sample R squared | `1 - sum((y - prediction)^2) / sum((y - mean(y_train))^2)`; if the denominator is exactly 0.0 the score is NaN with `oos_r2_status` "undefined: ..." (no tolerance, no substituted value) | `test_the_independent_nonzero_denominator_example_gives_exactly_zero`, `test_the_score_uses_the_training_mean_not_the_test_mean_as_its_reference`, `test_zero_denominator_is_undefined_and_does_not_crash`, `test_a_small_positive_denominator_is_calculated_not_classified_as_zero` |
+| Serialisation | an undefined score is JSON `null`; a nonstandard `NaN` or `Infinity` literal is never written | `test_an_undefined_score_serialises_to_json_null_and_never_to_a_nonstandard_literal`, `test_the_serialiser_leaves_valid_numbers_unchanged_and_refuses_to_write_nan` |
+| Rendering | the README table and the dashboard show "undefined" | `test_readme_tables_show_undefined_instead_of_a_number_or_an_exception`, `test_dashboard_renders_undefined_without_an_exception_or_a_misleading_number` |
+
+## Statistical experiments
+
+| Item | Rule | Test |
+|---|---|---|
+| Experiment A: independent observations, known distribution | the Kupiec rejection rate equals the exact binomial-enumeration size within 4 standard errors; the statistic equals the reference for every possible breach count | `test_A1_kupiec_statistic_and_pvalue_equal_the_reference_for_every_possible_breach_count`, `test_A2_with_independent_trials_the_rejection_rate_matches_the_exact_theoretical_size` |
+| Experiment B: rolling estimated forecasts | pooled breach rate equals the exact i.i.d. breach probability (historical: `(W - c(W-1))/(W+1)`; normal: Student t); rejection rate is an empirical finding, not implied by A | `test_S1_breach_rate_matches_the_exact_theory_and_kupiec_does_not_over_reject`, `test_S2_kupiec_has_power_against_a_volatility_shock` |
+
 ## Approximations and conventions that are not errors
 
 - Mean annual return is the arithmetic mean times 252; CAGR is shown beside it.

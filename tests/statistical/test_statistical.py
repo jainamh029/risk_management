@@ -1,8 +1,17 @@
-"""Statistical experiments on EXPLICITLY SYNTHETIC data (marker: statistical).
+"""EXPERIMENT B and simulation sanity checks (explicitly SYNTHETIC data; marker: statistical).
 
-These simulations check how the methods behave when the truth is known. They never use market data
-and nothing from them is written to data/ or results/. Acceptance bands were fixed in this file before
-the experiments were run; the observed values are recorded in each test's junit properties (run with -o junit_family=xunit1).
+EXPERIMENT B (S1, S2): rolling-window estimated forecasts, where each day's VaR is estimated from the previous 250
+returns. Neighbouring days share data, so breach counts are not independent trials; the Kupiec test's behaviour here is
+an empirical question and is NOT implied by experiment A (independent observations, known distribution) in
+test_known_distribution.py.
+
+PIPELINE SANITY CHECKS (S3, S4): a pure-noise panel and a planted-signal panel with a known truth. They show that the
+forecasting code does not invent skill and can detect an obvious one. They say nothing about whether any signal exists in
+real markets, and must not be cited as evidence of forecasting skill.
+
+These simulations never use market data and nothing from them is written to data/ or results/. Acceptance criteria were
+fixed before the experiments were first run, except where the audit trail below records a change; the observed values are
+recorded in each test's junit properties (run with -o junit_family=xunit1). Seeds and thresholds are not changed to obtain a pass.
 """
 import numpy as np
 import pandas as pd
@@ -58,6 +67,8 @@ def expected_breach_rate(method, conf):
     return float(tdist.cdf(-norm.ppf(conf) / np.sqrt(1 + 1 / W), df=W - 1))
 
 
+# AUDIT TRAIL, kept verbatim for transparency. Type of change: a TEST-DESIGN CORRECTION (the first criteria encoded a wrong
+# expectation); it was not a software repair, and no production code changed as a result.
 # HISTORY OF THIS EXPERIMENT (kept for transparency). The first version asserted that the Kupiec rejection rate under a correct
 # model falls in bands such as [0.02, 0.15] for 95% VaR. It failed: observed 0.008 (normal) and 0.000 (historical). The diagnosis
 # was that the bands rested on a wrong expectation: rolling windows share data, so breach counts are under-dispersed relative to
@@ -86,7 +97,7 @@ def test_S2_kupiec_has_power_against_a_volatility_shock(method, record_property)
     assert rej > 0.90, f"{method}: only {rej:.3f} of series with a tripled volatility were rejected"
 
 
-# ----- ML on synthetic panels with a known truth
+# ----- PIPELINE SANITY CHECKS: ML on synthetic panels with a known truth (not evidence of real-market skill)
 M_TICKERS, M_DAYS, M_CUT = 55, 1200, 699
 SMALL_RF = dict(n_estimators=20, max_depth=4, min_samples_leaf=30, max_features="sqrt", n_jobs=1)
 SMALL_GB = dict(n_estimators=20, max_depth=2, learning_rate=0.1, subsample=0.7)

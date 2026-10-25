@@ -19,6 +19,11 @@ def pct(x, d=2):
     return "n/a" if x is None else f"{100 * x:.{d}f}%"
 
 
+def r2txt(x):
+    """R squared as a percentage, or 'undefined' when it is null in the results file."""
+    return "undefined" if x is None else pct(x)
+
+
 def num(x, d=2):
     return "n/a" if x is None else f"{x:.{d}f}"
 
@@ -143,7 +148,7 @@ def build() -> str:
         rows.append(
             [
                 name.replace("_", " "),
-                pct(m["oos_r2_vs_training_mean"]),
+                r2txt(m["oos_r2_vs_training_mean"]),
                 pct(m["direction_accuracy"], 1),
                 f"{ic['mean']:.3f} (se {ic['std_error']:.3f}, t {ic['t_stat']:.2f}, n {ic['n']})",
                 f"{m['rank_ic_all_dates']['mean']:.3f}",

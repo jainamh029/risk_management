@@ -136,12 +136,18 @@ def _stats(s: pd.Series) -> dict:
 def score(pred: pd.Series, test: pd.DataFrame, baseline_mean: float, dates: pd.DatetimeIndex) -> dict:
     y = test["y"]
     sse_model = float(((y - pred) ** 2).sum())
-    sse_base = float(((y - baseline_mean) ** 2).sum())
+    sse_base = float(((y - baseline_mean) ** 2).sum())  # reference: the training-mean forecast (not the test mean)
+    if sse_base == 0.0:
+        # every test target equals the training mean exactly, so the score is undefined; no finite value is substituted
+        r2, r2_status = float("nan"), "undefined: every test target equals the training mean, so the reference sum of squares is zero"
+    else:
+        r2, r2_status = 1.0 - sse_model / sse_base, "defined"
     ic = rank_ic_by_date(pred, y)
     qs = quintile_spread_by_date(pred, y)
     return {
         "n_test_samples": int(len(y)),
-        "oos_r2_vs_training_mean": 1.0 - sse_model / sse_base,
+        "oos_r2_vs_training_mean": r2,
+        "oos_r2_status": r2_status,
         "direction_accuracy": float(((pred > 0) == (y > 0)).mean()),  # up versus not up
         "rank_ic_all_dates": _stats(ic),
         "rank_ic_nonoverlapping": _stats(nonoverlapping(ic, dates)),

@@ -2,6 +2,8 @@
 
 Scope: validate the implementation on branch `fix/rigor-pass` before merging into `main`. No model, analysis or feature code was changed in this stage (`git diff HEAD -- riskengine/` is empty). Nothing was pushed, no pull request was opened, no remote was changed.
 
+> **Update, repair stage.** Part 2 at the end of this document records the bounded repair of the 16 failures reported below. After the repair the complete suite has **350 tests: 350 passed, 0 failed, 0 skipped, 0 blocked**, in the working environment and in a clean virtual environment; the stored real-data results are unchanged (except for one added status field); the independent backtest verifier still matches all 1,832 results. Sections 1 to 11 below are the original acceptance-run record and are kept unchanged as the audit trail of the 212-test run (196 passed, 16 failed).
+
 ## 1. Verdict in one paragraph
 
 The calculations are correct and the leakage controls hold: every formula checked against an independent reference matches, an independent plain-loop recomputation reproduces all 1,832 cached backtest results, and a simulation with a known truth shows the forecasting pipeline finds nothing in noise and finds a planted signal. **Sixteen tests fail, and all sixteen come from two input-handling gaps, not from wrong numbers:** `var.py` does not validate its inputs (15 failing cases) and `ml.score` raises an unhandled `ZeroDivisionError` when the R squared denominator is zero (1 case). Neither affects the stored results, because the real price data is finite and the pipeline masks missing windows before calling these functions, but the functions can silently return NaN, infinity or a plausible-looking number when called directly with bad input. The smallest repair is about 15 lines (section 5). I did not make it, because this stage is validation, not development. Empirically, the VaR models are miscalibrated at 99% and the forecasting model shows no demonstrated skill (section 9).
@@ -174,3 +176,111 @@ Observed on the frozen real snapshot:
 ## 11. Recommendation
 
 Do not weaken the 16 failing tests. Either (a) apply the roughly 15-line repair in section 5 in a separate commit and rerun the suite, or (b) merge with the 16 failures documented as known input-validation gaps. There is no failure that affects a stored number, a README figure or a leakage control. The decision and the repair are yours to authorise; I stopped here.
+
+---
+
+# Part 2. Repair stage
+
+Scope: a bounded repair of the confirmed failures, then the complete validation and reproducibility checks again. No financial method, model setting, feature, evaluation period, allocation rule or universe was changed. Nothing was pushed, merged or opened as a pull request; no Git configuration was changed (the commit author is set per commit with `-c` flags only).
+
+## 12. Baseline
+
+| Item | Value |
+|---|---|
+| Branch / commit | `fix/rigor-pass`, `970faf1` (verified, not assumed); working tree clean; `origin/fix/rigor-pass` is at `3b8ef2b`, so `970faf1` was local only |
+| Git identity configured | none (read-only check) |
+| Python / OS | 3.12.2, macOS 26.2 arm64 |
+| Frozen snapshot, SHA-256 | `data/prices.parquet` `a9a0c76423e6a28b9bb0de37b6e5a4d3e6be961e367a56f7bf26784004c7922e`; `data/tbill_13w.parquet` `8deddbe70e309bb3243da8e753e9251c3a95bdd76db5716be2f13c4235f45aba`; `data/prices_meta.json` `000efc5756df561895e97a1d999da1e7db518e78b90814ac3bd7a93caa8b8687`; `data/universe.csv` `d84ee026702c1668c9558c9069a3522897bb7580392e66cc3767958a6c95e025`. Recomputed after all repair work and after the pipeline runs: unchanged. No market data was downloaded. |
+| Result artifacts | copies of `results/` and `README.md` taken before any edit, compared byte for byte afterwards |
+
+Baseline run, before any edit: `.venv/bin/python -m pytest -q`, exit status 1, **212 tests: 196 passed, 16 failed, 0 skipped, 0 blocked, 0 errors**, 235 s. The 16 failing tests were exactly the reported ones: `test_D22b_a_zero_denominator_is_handled_explicitly`, `test_B11a_invalid_confidence_is_rejected` (7 parameter sets), `test_B11b_missing_or_nonfinite_returns_are_rejected` (4), `test_B11c_insufficient_data_is_rejected` (4). The reported baseline was therefore reproduced exactly.
+
+## 13. Defects, root causes and repairs
+
+### F-1. `var.py` accepted invalid input
+
+Root cause: `historical_var_es` and `normal_var_es` only checked for NaN. The confidence went straight to `np.quantile` or `scipy.stats.norm.ppf`, and finiteness, dimensionality and sample size were never checked, so `conf=1` gave `inf`/`nan`, a `+inf` return gave a plausible `(0.018, 0.02)` from the historical method, and empty or one-observation input was accepted or failed obscurely.
+
+Repair (`riskengine/var.py`): two shared validators, `validate_confidence` and `validate_returns`, called at the top of both calculation functions and therefore by `var_es` and `latest_var_table`; `var_es` also requires the method to be exactly `historical` or `normal`. Contract: confidence must be a real scalar strictly between 0 and 1, finite, and not a boolean; returns must be a real numeric one-dimensional sequence of at least two finite values (list, tuple, NumPy array or pandas Series); complex values, booleans, strings, objects, scalars, multidimensional inputs, NaN and both infinities raise `ValueError` with an explanatory message. Nothing is dropped, filled, clipped or flattened; constant finite returns remain valid; the quantile, ES and normal formulas were not touched. Incomplete windows remain unavailable forecasts in `backtest.rolling_forecasts` and are excluded by `latest_var_table`, as documented.
+
+Internal callers checked: `portfolio.performance`, `latest_var_table`, and the dashboard's VaR explorer all pass finite data of at least two observations (verified by the unchanged real-data results and the dashboard tests); none needed changing. The `var.py` docstring previously said no annualisation is applied "anywhere in this package"; it is now scoped to VaR and ES.
+
+| Input | Before | After |
+|---|---|---|
+| `var_es(r, 1.0, "normal")` | `(inf, nan)` | `ValueError: confidence must be strictly between 0 and 1 ...` |
+| `var_es([..., +inf, ...], 0.95, "historical")` | `(0.018, 0.02)` | `ValueError: returns must be finite: found 0 NaN, 1 +inf and 0 -inf ...` |
+| `var_es([], 0.95, "normal")` | `(nan, nan)` plus warnings | `ValueError: at least 2 returns are required, got 0` |
+| `var_es(r, True, "normal")` | accepted as 1 | `ValueError: ... not a boolean` |
+
+### F-2. `ml.score` raised `ZeroDivisionError` for a zero denominator
+
+Root cause: `1.0 - sse_model / sse_base` with Python floats and no handling of `sse_base == 0.0`.
+
+Repair (`riskengine/ml.py`): the reference sum of squares is computed exactly as before, using the training mean (not scikit-learn's test-mean reference); if it equals exactly 0.0 the score is `NaN` and a new field `oos_r2_status` records "undefined: every test target equals the training mean, so the reference sum of squares is zero"; otherwise the status is "defined". No tolerance is used, so small positive denominators are calculated (tested down to 1e-300 per observation). All other scores of the same evaluation are returned unchanged, and the existing return structure is preserved plus the one status key. Propagation: a new `riskengine/serialize.py` (the previous `clean()` moved out of `scripts/run_pipeline.py` so it can be tested; same logic, plus `allow_nan=False`) writes the undefined value as JSON `null` and can never emit a nonstandard `NaN` literal; `scripts/make_readme_tables.py` and `dashboard/app.py` render it as the word "undefined" (Overview metric and finding, Forecasting tab banner and table) instead of an exception, a zero or a percentage; the pipeline's console line prints "undefined".
+
+### Test-side corrections in this stage (not software repairs)
+
+| What | Detail |
+|---|---|
+| `test_E28b_readme_describes_the_implemented_convention` | It forbade the string "buy-and-hold" anywhere in the README. The README now says "not buy-and-hold" deliberately. The test now requires every mention to be negated and the daily-rebalancing sentence to be present, and forbids the ambiguous phrase "held fixed over the test period". |
+| Expectations I got wrong while writing the new tests | The recovery index after a gap (day 14, not 13); the message produced by a nullable pandas NA (it becomes NaN and is rejected as non-finite, which is correct); the tolerance for a p-value near LR = 0 (the chi-square survival function has infinite slope there, so a 4.5e-13 rounding difference in LR moves the p-value by 1.3e-7). In each case the code was right and the test was corrected, with the reason written in the test. |
+| `test_F31` (regeneration into a temporary directory) | It correctly failed once, because the checked-in `ml_summary.json` lacked the new status field. It passes after the results were regenerated from the frozen snapshot (section 15). |
+
+## 14. Regression tests added (138 new tests; every existing test kept, none weakened, skipped or marked xfail)
+
+| File | What it covers |
+|---|---|
+| `tests/unit/test_var_validation.py` | Both methods and both direct entry points. Invalid confidence: 0, 1, below 0, above 1, NaN, plus and minus infinity, booleans (Python and NumPy), list, tuple, array, 0-d array, dict, string, None, complex. Invalid returns: empty, one observation, scalars, 2-D list and array and DataFrame, NaN, plus and minus infinity, strings, numeric strings, mixed, None inside, booleans, series of strings, nullable NA, complex list and complex array with zero imaginary part, ragged and dict. Unknown methods. List, tuple, float64 and float32 arrays, Series with and without a date index, integer dtype. Constant returns. Unchanged reference results. Negative VaR not clipped. Missing windows still unavailable forecasts and still excluded by `latest_var_table`. |
+| `tests/unit/test_ml_score.py` | Zero denominator with perfect and with imperfect predictions; constant targets that differ from the training mean; small positive denominators (1e-12 and 1e-300); the training-mean reference versus a test-mean reference; the return structure; other metrics intact; JSON null and strict parsing; valid numbers unchanged by serialisation. |
+| `tests/integration/test_undefined_r2_outputs.py` | README table generation and dashboard rendering with a null R squared (in a temporary copy of the results), and the unchanged rendering of the real results. |
+| `tests/statistical/test_known_distribution.py` | Experiment A (section 17). |
+
+Independent expected values: `scipy.stats.norm.ppf` and `norm.pdf` closed forms for the normal method; hand arithmetic for the historical method on `[-0.01, 0, 0.01]` (VaR `(2c - 1) * 0.01`, ES 0.01) and on `[-0.04, -0.02, 0, 0.01, 0.03]`; constant returns `[0.01, 0.01, 0.01]` give exactly -0.01 within 1e-15; R squared worked by hand: training mean 1, targets `[2, 2]`, predictions `[1, 1]` gives `1 - 2/2 = 0`; training mean 0, targets `[1, 3]`, predictions `[2, 2]` gives `1 - 2/10 = 0.8` (a test-mean reference would give 0); targets 2.0 against training mean 1.0 with predictions 1.5 gives 0.75; targets 1e-6 above the training mean with predictions halfway gives 0.75; the likelihood ratios come from the binomial likelihoods written in the test.
+
+## 15. Verification commands and outcomes
+
+| Step | Command | Exit | Outcome |
+|---|---|---|---|
+| A. Syntax | `python -m compileall -q riskengine tests scripts dashboard` | 0 | no errors |
+| B. Focused tests | `pytest tests/unit/test_var_validation.py tests/unit/test_var_es.py`, then `tests/unit/test_ml_score.py tests/unit/test_ml_unit.py`, then `tests/integration/test_undefined_r2_outputs.py`, then `tests/statistical` | 0 | 163, 22, 3 and 12 passed (before the full suite) |
+| C1. First full run after the repairs | `pytest -q` | 1 | 350 tests: 348 passed, 2 failed (`test_F31` for the stale `ml_summary.json`; `test_E28b` for the intentionally negated README wording). Both explained in section 13. |
+| D. Frozen-snapshot pipeline | `python scripts/run_pipeline.py` (no `fetch_data.py`), `python scripts/check_sp500_membership.py` (offline), `python scripts/verify_backtest_independent.py`, `python scripts/make_readme_tables.py` | 0, 0, 0, 0 | verifier: all 1,832 results match; see section 16 for the comparison |
+| C2. Final full run, working environment | `pytest -q` | 0 | **350 passed, 0 failed, 0 skipped, 0 blocked, 0 errors** (238 s) |
+| E. Clean environment | new venv, `pip install -r requirements.txt` (now including `nbconvert==7.17.2`), then with that venv's interpreter: `pytest -q`, `run_pipeline.py`, `check_sp500_membership.py`, `verify_backtest_independent.py`, `make_readme_tables.py --check` | 0 for each | **350 passed**; pipeline results byte-identical to the working environment; verifier all match; README block matches; the copied snapshot's checksum equals the original |
+| F. Notebook | `jupyter nbconvert --to notebook --execute --output-dir <temporary directory> notebooks/walkthrough.ipynb` in the clean environment | 0 | 6 code cells executed, 0 errors, 4 figures, nothing on stderr; the original notebook's hash is unchanged |
+| G. Dashboard | the automated dashboard tests (13 existing and 2 new, inside the 350) plus a live browser check | | see below |
+| H. Missing snapshot | scratch copy of the clean environment without `data/prices.parquet`; `PYTHONPATH=<harness> python -m pytest -p nonet -q`, where `nonet` blocks and logs every socket connect, DNS lookup and `create_connection` | 10 | 245 passed, **105 BLOCKED**, 0 failed; **0 network attempts recorded**; the snapshot was not recreated; the user's real snapshot was never touched |
+
+Dashboard, performed: the automated tests (valid defaults agree with the results files; filter, preset, forecast-table and control-option tests; missing-data message; the new undefined-R-squared test and the unchanged-real-results test). Live browser check (real, in the in-app browser): served the dashboard from a temporary copy whose three R squared values were set to `null`; the Overview metric and the findings sentence read "undefined", the Forecasting tab shows an information banner explaining why, the three model rows show "undefined" while direction accuracy, rank IC and t statistics are still shown, and the baseline row shows 0.00%. A screenshot of the Forecasting tab was taken. Not repeated in this stage: keyboard navigation, phone width, and the VaR explorer in a browser (these were checked in the earlier stage and the explorer is covered by the automated tests). The dashboard's "None" text in not-applicable table cells of the baseline rows is pre-existing cosmetic behaviour, unrelated to this repair.
+
+## 16. Reproducibility: did valid-data results change?
+
+No. From the same frozen snapshot, the regenerated artifacts compared with the copies taken before any edit:
+
+| Artifact | Result |
+|---|---|
+| `metrics.csv`, `ml_feature_importance.csv`, `ml_latest_forecasts.csv`, `ml_rank_ic_by_date.csv`, `portfolios.json`, `run_info.json`, `universe_membership.csv`, `universe_membership_summary.json`, `var_backtest_by_ticker.csv`, `var_backtest_summary.json`, `var_latest.csv` | byte-identical (11 of 12) |
+| `ml_summary.json` | differs by exactly three added lines, `"oos_r2_status": "defined"`, one per model. After removing that key the file is identical to the baseline, including every number. This is an actual schema addition, not a numerical change or a timestamp. |
+| README results block | unchanged (the README diff is wording only: VaR/ES annualisation scope, portfolio rebalancing wording, the undefined-R-squared sentence) |
+| Clean-environment regeneration | byte-identical to the working-environment results |
+
+## 17. Statistical-test integrity
+
+Two experiments are now kept apart and labelled as such in the test files.
+
+**Experiment A, independent observations from a known distribution** (`tests/statistical/test_known_distribution.py`, new; seed 20261101 fixed in advance). The true VaR is known, so each day is an independent Bernoulli trial. The exact probability that the Kupiec test rejects at 5% was computed by enumerating the binomial distribution with a separately written likelihood ratio. Observed rejection rate against exact size: 95% confidence, 5.10% against 4.67% (+0.91 standard errors); 99% confidence, 3.85% against 4.06% (-0.48 standard errors). The test also checks that `kupiec_pof` equals the reference for every possible breach count (0 to 1200) for both confidence levels. A shows that the Kupiec function behaves correctly under its own assumptions. **It does not show anything about experiment B.**
+
+**Experiment B, rolling-window estimated forecasts** (`tests/statistical/test_statistical.py`, S1 and S2, thresholds and seeds unchanged). Here the VaR is estimated from the previous 250 returns, neighbouring days share data, and the breach counts are not independent trials. The original result and the audit trail are preserved verbatim in that file and in section 8 of this report: the first criteria (rejection rate within bands such as [0.02, 0.15]) failed, with observed rejection rates of 0.8% (normal, 95%) and 0.0% (historical, 95%) and a power of 93.2% for the normal method against a threshold of 0.95. The replacement criteria were written after seeing that failure. The justification: (a) agreement of the pooled breach rate with the exact i.i.d. breach probability, derived analytically (this one is a mathematically grounded criterion); (b) a rejection rate of at most 0.10, and (c) a power above 0.90, which are **empirical guards, not derived bounds**, chosen after observing 0% to 8% and 93% to 96%. This was a test-design correction (the first expectation was mathematically invalid for overlapping windows), not a software repair; no production code changed because of it. The observed dispersion (variance below that of independent trials) is an empirical finding, not a proven theorem, here. The simulation tests S3 and S4 (pure noise, planted signal) remain as pipeline sanity checks; they say nothing about whether any forecastable signal exists in real markets.
+
+## 18. Remaining failures, blockers, warnings and unverified claims
+
+- **Failures: none.** 350 of 350 pass in both environments.
+- **Blocked:** none in the complete runs. The deliberate missing-snapshot run reports 105 BLOCKED and exits with status 10.
+- **Warnings (10, one cause):** `RuntimeWarning: invalid value encountered in divide` from `np.corrcoef` inside `ml.rank_ic_by_date` when the test targets are constant on a date, as in the undefined-R-squared test scenarios. The rank IC is correctly NaN there; the warning is noise. Proposed (not made): skip zero-variance dates explicitly.
+- **Remaining gap, same class as F-1, in a layer I was told to leave alone:** `backtest.rolling_forecasts` does not validate its confidence argument. Observed: `conf=1.0` with the normal method returns `inf` forecasts, `conf=0.0` returns `-inf`, `conf=1.5` returns `nan`; the historical method raises only for confidence outside [0, 1]. `kupiec_pof` does validate. The pipeline always passes the fixed `config.CONFS`, so no stored result is affected. Proposed repair: call `var.validate_confidence(conf)` at the top of `rolling_forecasts` (two lines plus tests).
+- **Unverified:** the vendor's retroactive price adjustment (not strictly point-in-time); the accuracy of Yahoo Finance data; Wikipedia as the membership source (SATS contradiction, renamed symbols); reduced-motion behaviour of the dashboard; the `fetch_data.py` download step (the frozen snapshot was used by design); line coverage; any browser other than the in-app one.
+
+## 19. Confirmations
+
+- **No tuning and no change of evaluation:** `riskengine/config.py`, `riskengine/portfolio.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/data.py`, the universe, the training and test dates, the screens and the model settings are unchanged in this stage (`git diff 970faf1 -- <those files>` is empty). Production files changed: `riskengine/var.py` (validation), `riskengine/ml.py` (the score), `riskengine/serialize.py` (new, moved from the pipeline script), `scripts/run_pipeline.py` (uses the serialiser, prints "undefined"), `scripts/make_readme_tables.py` and `dashboard/app.py` (render an undefined score). No poorly performing method, ticker or period was excluded and no simulated data replaced an observation.
+- **Verdicts.** Software correctness checks: passed (350 of 350 in both environments, the independent verifier matches all 1,832 results, the notebook runs without error, the dashboard checks pass). Leakage controls: passed (the earlier leakage tests and the simulation checks are unchanged and still pass). What the unchanged market-performance results show: the VaR models are miscalibrated at 99% (historical 1.59% breaches against 1% expected, 69.2% of tickers rejected; normal 1.95% and 91.5%), with the Kupiec test known to be conservative for rolling forecasts; the forecasting model shows no demonstrated skill (out-of-sample R squared between -0.9% and -6.0% against the training mean, direction accuracy about 53.6% against a 57.5% baseline, rank IC 0.044 with t = 0.60 on 11 independent periods); the portfolio results beat SPY's Sharpe ratio in one period on one split and are not evidence of skill. Passing tests shows the software computes what it claims, not that any strategy has investment skill.

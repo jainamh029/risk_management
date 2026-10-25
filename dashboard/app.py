@@ -81,6 +81,11 @@ def pct(x, d=2):
     return "n/a" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{100 * x:.{d}f}%"
 
 
+def r2txt(x):
+    """R squared as a percentage, or the word 'undefined' when the score could not be defined (null in the results file)."""
+    return "undefined" if x is None else pct(x)
+
+
 def line_chart_layout(fig, title, yfmt=".1%", ytitle=None, height=430):
     fig.update_layout(
         title=dict(text=title, x=0, xanchor="left", y=0.97, yanchor="top", font=dict(size=15)),
@@ -117,7 +122,7 @@ with tab_over:
     c1.metric("Tickers backtested", int(h99["n_tickers"]), help="Tickers with at least 250 days of history plus 250 forecast days.")
     c2.metric("Historical 99% VaR breach rate", pct(h99["pooled_breach_rate"]), f"expected {pct(h99['expected_rate'])}", delta_color="off", delta_arrow="off", help="Share of all forecast days on which the loss was bigger than the 99% VaR.")
     c3.metric("Normal 99% VaR breach rate", pct(n99["pooled_breach_rate"]), f"expected {pct(n99['expected_rate'])}", delta_color="off", delta_arrow="off")
-    c4.metric("Forecast model R squared (test)", pct(ens["oos_r2_vs_training_mean"]), help="Against always predicting the training-period average. Below zero means worse than that.")
+    c4.metric("Forecast model R squared (test)", r2txt(ens["oos_r2_vs_training_mean"]), help="Against always predicting the training-period average. Below zero means worse than that. Undefined if every test target equals the training average.")
 
     st.subheader("What the real data shows")
     lines = []
@@ -138,9 +143,13 @@ with tab_over:
     for n in built:
         o = pf["presets"][n]["out_of_sample_test"]
         lines.append(f"  - {n}: test Sharpe {o['sharpe']:.2f} against {pf['benchmark_spy_test']['sharpe']:.2f} for SPY over the same period (one period, one split).")
-    verdict = "worse than" if ens["oos_r2_vs_training_mean"] < 0 else "better than"
+    r2v = ens["oos_r2_vs_training_mean"]
+    if r2v is None:
+        r2_sentence = "out-of-sample R squared is undefined (every test target equals the training average)"
+    else:
+        r2_sentence = f"out-of-sample R squared of {pct(r2v)} is {'worse than' if r2v < 0 else 'better than'} always predicting the training average"
     lines.append(
-        f"- Forecast model (ensemble): out-of-sample R squared of {pct(ens['oos_r2_vs_training_mean'])} is {verdict} always predicting the training average; "
+        f"- Forecast model (ensemble): {r2_sentence}; "
         f"direction accuracy {pct(ens['direction_accuracy'], 1)} against {pct(R['ml']['baselines']['share_of_test_samples_with_positive_return'], 1)} of test samples going up; "
         f"rank IC {ens['rank_ic_nonoverlapping']['mean']:.3f} with t statistic {ens['rank_ic_nonoverlapping']['t_stat']:.2f} over {ens['rank_ic_nonoverlapping']['n']} independent periods."
     )
@@ -318,7 +327,7 @@ def custom_portfolio(min_sharpe, max_stocks, min_ret_1y, lo, hi):
 with tab_pf:
     pf = R["portfolios"]
     st.markdown(
-        f"Holdings and weights were chosen using data from {pf['train_start']} to {pf['train_end']} only, then held fixed and measured from {pf['test_start']} to {pf['test_end']}. "
+        f"Holdings and weights were chosen using data from {pf['train_start']} to {pf['train_end']} only, then fixed. Returns from {pf['test_start']} to {pf['test_end']} assume the portfolio is rebalanced to those weights every day (constant weights, not buy-and-hold). "
         f"{pf['eligible_stocks']} stocks with a complete training history were eligible. A preset whose screen leaves fewer than {config.MIN_ASSETS} stocks is not built; the screen is never loosened."
     )
     names = list(pf["presets"])
@@ -360,19 +369,21 @@ with tab_ml:
         f"They were scored on {mi['test_samples']:,} later samples ({mi['test_first_feature_date']} to {mi['test_last_feature_date']}) against baselines."
     )
     ens = R["ml"]["models"]["ensemble"]
-    if ens["oos_r2_vs_training_mean"] < 0:
+    if ens["oos_r2_vs_training_mean"] is None:
+        st.info("R squared is undefined on the test period because every test target equals the training average. The other measures below are still shown.")
+    elif ens["oos_r2_vs_training_mean"] < 0:
         st.warning("On the test period the ensemble forecasts worse than always predicting the training average (R squared below zero).")
     else:
         st.success("On the test period the ensemble forecasts better than always predicting the training average. See the rank IC statistics before drawing conclusions.")
     rows = []
     for name, m in R["ml"]["models"].items():
         ic = m["rank_ic_nonoverlapping"]
-        rows.append({"Model": name.replace("_", " "), "R squared vs training mean": m["oos_r2_vs_training_mean"], "Direction accuracy": m["direction_accuracy"], "Rank IC (independent periods)": ic["mean"], "t statistic": ic["t_stat"], "Independent periods": ic["n"], "Rank IC (all dates)": m["rank_ic_all_dates"]["mean"]})
-    rows.append({"Model": "baseline: training mean", "R squared vs training mean": 0.0, "Direction accuracy": mb["training_mean_forecast"]["direction_accuracy"]})
+        rows.append({"Model": name.replace("_", " "), "R squared vs training mean": r2txt(m["oos_r2_vs_training_mean"]), "Direction accuracy": m["direction_accuracy"], "Rank IC (independent periods)": ic["mean"], "t statistic": ic["t_stat"], "Independent periods": ic["n"], "Rank IC (all dates)": m["rank_ic_all_dates"]["mean"]})
+    rows.append({"Model": "baseline: training mean", "R squared vs training mean": "0.00%", "Direction accuracy": mb["training_mean_forecast"]["direction_accuracy"]})
     for f_ in ("mom_60", "mom_126"):
         ic = mb[f"rank_ic_{f_}_nonoverlapping"]
         rows.append({"Model": f"baseline: {f_.replace('_', ' ')} alone", "Rank IC (independent periods)": ic["mean"], "t statistic": ic["t_stat"], "Independent periods": ic["n"], "Rank IC (all dates)": mb[f"rank_ic_{f_}_all_dates"]["mean"]})
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, column_config={"R squared vs training mean": st.column_config.NumberColumn(format="percent"), "Direction accuracy": st.column_config.NumberColumn(format="percent"), "Rank IC (independent periods)": st.column_config.NumberColumn(format="%.3f"), "Rank IC (all dates)": st.column_config.NumberColumn(format="%.3f"), "t statistic": st.column_config.NumberColumn(format="%.2f")})
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, column_config={"Direction accuracy": st.column_config.NumberColumn(format="percent"), "Rank IC (independent periods)": st.column_config.NumberColumn(format="%.3f"), "Rank IC (all dates)": st.column_config.NumberColumn(format="%.3f"), "t statistic": st.column_config.NumberColumn(format="%.2f")})
     st.caption(f"{pct(mb['share_of_test_samples_with_positive_return'], 1)} of test samples went up, so a model that always says up scores that on direction accuracy.")
 
     chosen = st.multiselect("Models in the chart", ["random_forest", "gradient_boosting", "ensemble"], default=["ensemble"], key="ml_models")

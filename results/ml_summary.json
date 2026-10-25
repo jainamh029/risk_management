@@ -46,6 +46,7 @@
     "random_forest": {
       "n_test_samples": 287999,
       "oos_r2_vs_training_mean": -0.008990092091636592,
+      "oos_r2_status": "defined",
       "direction_accuracy": 0.5373595047205025,
       "rank_ic_all_dates": {
         "n": 643,
@@ -79,6 +80,7 @@
     "gradient_boosting": {
       "n_test_samples": 287999,
       "oos_r2_vs_training_mean": -0.060303580771474685,
+      "oos_r2_status": "defined",
       "direction_accuracy": 0.5334254632828587,
       "rank_ic_all_dates": {
         "n": 643,
@@ -112,6 +114,7 @@
     "ensemble": {
       "n_test_samples": 287999,
       "oos_r2_vs_training_mean": -0.029887618111961167,
+      "oos_r2_status": "defined",
       "direction_accuracy": 0.535817832700808,
       "rank_ic_all_dates": {
         "n": 643,

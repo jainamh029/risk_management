@@ -17,29 +17,14 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from riskengine import backtest, config, data, metrics, ml, portfolio, var  # noqa: E402
+from riskengine import backtest, config, data, metrics, ml, portfolio, serialize, var  # noqa: E402
 
 OUT = ROOT / "results"
 OUT.mkdir(exist_ok=True)
 
 
-def clean(o):
-    """JSON-safe: NaN/inf -> None, numpy scalars -> python."""
-    if isinstance(o, dict):
-        return {str(k): clean(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)):
-        return [clean(v) for v in o]
-    if isinstance(o, (np.floating, float)):
-        return None if (math.isnan(o) or math.isinf(o)) else float(o)
-    if isinstance(o, (np.integer,)):
-        return int(o)
-    if isinstance(o, (pd.Timestamp,)):
-        return str(o.date())
-    return o
-
-
 def dump(name, obj):
-    (OUT / name).write_text(json.dumps(clean(obj), indent=2))
+    (OUT / name).write_text(serialize.dumps(obj, indent=2))
 
 
 prices, rf, meta = data.load_snapshot()
@@ -124,4 +109,5 @@ print(summ[["method", "confidence", "n_tickers", "pooled_breach_rate", "expected
 for k, v in pf["presets"].items():
     print(k, v["status"], v.get("reason", ""))
 for k, v in mlr["models"].items():
-    print(f"ml {k}: oos R2 vs training mean {v['oos_r2_vs_training_mean']:.4f}, direction {v['direction_accuracy']:.4f}, rank IC (non-overlapping) {v['rank_ic_nonoverlapping']['mean']:.4f} (t={v['rank_ic_nonoverlapping']['t_stat']:.2f})")
+    r2 = "undefined" if v["oos_r2_vs_training_mean"] != v["oos_r2_vs_training_mean"] else f"{v['oos_r2_vs_training_mean']:.4f}"
+    print(f"ml {k}: oos R2 vs training mean {r2}, direction {v['direction_accuracy']:.4f}, rank IC (non-overlapping) {v['rank_ic_nonoverlapping']['mean']:.4f} (t={v['rank_ic_nonoverlapping']['t_stat']:.2f})")
