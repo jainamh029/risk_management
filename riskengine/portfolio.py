@@ -73,6 +73,7 @@ def performance(daily: pd.Series, rf_annual: float) -> dict:
     ann_ret = float(d.mean() * TRADING_DAYS)
     vol = float(d.std(ddof=1) * np.sqrt(TRADING_DAYS))
     cum = (1.0 + d).cumprod()
+    wealth = np.concatenate([[1.0], cum.values])  # starting capital counts as a peak
     out = {
         "n_days": int(len(d)),
         "start": str(d.index[0].date()),
@@ -81,7 +82,7 @@ def performance(daily: pd.Series, rf_annual: float) -> dict:
         "annual_vol": vol,
         "sharpe": (ann_ret - rf_annual) / vol if vol > 0 else float("nan"),
         "total_return": float(cum.iloc[-1] - 1.0),
-        "max_drawdown": float((cum / cum.cummax() - 1.0).min()),
+        "max_drawdown": float((wealth / np.maximum.accumulate(wealth) - 1.0).min()),
     }
     for c in config.CONFS:
         v, e = historical_var_es(d.values, c)
@@ -90,7 +91,7 @@ def performance(daily: pd.Series, rf_annual: float) -> dict:
     return out
 
 
-def fit(returns: pd.DataFrame, prices: pd.DataFrame, is_etf: pd.Series, rf_train: float) -> dict:
+def fit(returns: pd.DataFrame, prices: pd.DataFrame, is_etf: pd.Series, rf_train: float, presets: dict | None = None) -> dict:
     """Choose holdings and weights using returns up to config.TRAIN_END only.
 
     Anything after TRAIN_END in the inputs is ignored (sliced off here).
@@ -110,7 +111,7 @@ def fit(returns: pd.DataFrame, prices: pd.DataFrame, is_etf: pd.Series, rf_train
     vt = latest_var_table(tr, window=config.WINDOW, confs=(0.99,)).set_index("ticker")["historical_var_99"]
 
     out = {"train": train, "eligible": complete, "presets": {}}
-    for name, preset in config.PRESETS.items():
+    for name, preset in (presets or config.PRESETS).items():
         all_passed = screen(m, vt, preset)
         passed = all_passed.head(preset["max_stocks"])
         entry = {
@@ -139,9 +140,10 @@ def build_and_evaluate(
     is_etf: pd.Series,
     rf_train: float,
     rf_test: float,
+    presets: dict | None = None,
 ) -> dict:
     returns = returns.dropna(how="all")
-    fitted = fit(returns, prices, is_etf, rf_train)
+    fitted = fit(returns, prices, is_etf, rf_train, presets)
     train = fitted["train"]
     test = returns.loc[config.TEST_START :]
     if test.empty:

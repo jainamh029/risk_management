@@ -196,6 +196,36 @@ def test_weights_are_a_local_optimum_of_the_training_sharpe(fitted, rfs):
                     assert sharpe(x) <= base + 1e-7, (name, i, j)
 
 
+def _worst(d, start_peak):
+    wealth, peak, worst = 1.0, (1.0 if start_peak else None), 0.0
+    for x in d:
+        wealth *= 1 + x
+        peak = wealth if peak is None else max(peak, wealth)
+        worst = min(worst, wealth / peak - 1)
+    return worst
+
+
+def test_max_drawdown_counts_the_starting_capital_as_a_peak(returns, rfs):
+    """Real test-period series for which the two definitions differ: a loss from the starting value is the worst drawdown."""
+    test = returns.loc[config.TEST_START :]
+    differ = [t for t in test.columns if test[t].notna().all() and abs(_worst(test[t].values, True) - _worst(test[t].values, False)) > 1e-9]
+    assert len(differ) >= 3, "the real data should contain stocks whose worst fall began at the start of the test window"
+    for t in differ[:8]:
+        assert portfolio.performance(test[t], rfs[1])["max_drawdown"] == pytest.approx(_worst(test[t].values, True), abs=1e-12), t
+
+
+def test_performance_var_and_es_match_the_var_module_formulas(returns, rfs):
+    d = returns["SPY"].loc[config.TEST_START :].dropna()
+    p = portfolio.performance(d, rfs[1])
+    losses = np.sort(-d.values)
+    for c, key in ((0.95, "95"), (0.99, "99")):
+        pos = c * (len(losses) - 1)
+        lo, hi = int(np.floor(pos)), int(np.ceil(pos))
+        v = losses[lo] + (pos - lo) * (losses[hi] - losses[lo])
+        assert p[f"hist_var_{key}_1d"] == pytest.approx(v, abs=1e-15)
+        assert p[f"hist_es_{key}_1d"] == pytest.approx(losses[losses >= v].mean(), abs=1e-15)
+
+
 def test_spy_benchmark_matches_a_direct_calculation(result, returns, rfs):
     s = returns["SPY"].loc[config.TEST_START :].dropna().values
     b = result["benchmark_spy_test"]

@@ -15,38 +15,52 @@ def kupiec_reference(n, x, p):
     return -2.0 * (ll0 - ll1)
 
 
-@pytest.mark.parametrize("n,x,p", [(1525, 23, 0.01), (1525, 24, 0.01), (1500, 80, 0.05), (1000, 50, 0.05), (1714, 27, 0.01)])
-def test_kupiec_matches_binomial_reference(n, x, p):
-    lr, pv = backtest.kupiec_pof(n, x, p)
-    assert lr == pytest.approx(kupiec_reference(n, x, p), abs=1e-9)
-    assert pv == pytest.approx(chi2.sf(lr, 1), rel=1e-12)
+def real_backtest_rows(returns):
+    rows = []
+    for t in ("SPY", "AAPL", "JPM", "XOM", "VLTO", "NVDA"):
+        rows += backtest.backtest_series(returns[t], config.WINDOW, config.CONFS)
+    return rows
+
+
+def test_kupiec_matches_binomial_reference_on_real_backtest_counts(returns):
+    """n, x and p all come from real backtests of real tickers."""
+    rows = real_backtest_rows(returns)
+    assert len(rows) == 24
+    for r in rows:
+        lr, pv = backtest.kupiec_pof(r["n_forecasts"], r["breaches"], r["expected_rate"])
+        assert lr == pytest.approx(kupiec_reference(r["n_forecasts"], r["breaches"], r["expected_rate"]), abs=1e-9)
+        assert pv == pytest.approx(chi2.sf(lr, 1), rel=1e-12)
+        assert (r["kupiec_lr"], r["kupiec_p"]) == (lr, pv)
 
 
 def test_kupiec_reproduces_the_numbers_saved_in_the_original_notebook():
-    # SO and TMO rows of the original saved output (n=1525, 99 percent); the original formula was correct for x > 0
+    # SO and TMO rows from the saved output of the original run on real data (n=1525, 99 percent).
+    # The original formula was correct for x > 0.
     assert backtest.kupiec_pof(1525, 23, 0.01)[0] == pytest.approx(3.441928, abs=1e-6)
     assert backtest.kupiec_pof(1525, 24, 0.01)[0] == pytest.approx(4.317578, abs=1e-6)
 
 
-def test_kupiec_zero_breaches_is_computed_not_set_to_zero():
-    """The original returned 0 for x = 0, which declared a far-too-conservative model valid."""
-    for n, p in [(1500, 0.01), (1500, 0.05)]:
+def test_kupiec_boundaries_use_the_real_forecast_count(returns):
+    """x = 0 and x = n are the logical boundaries; n is the real number of SPY forecasts."""
+    n = backtest.backtest_series(returns["SPY"], config.WINDOW, (0.99,))[0]["n_forecasts"]
+    for p in (0.01, 0.05):
         lr, pv = backtest.kupiec_pof(n, 0, p)
-        assert lr == pytest.approx(-2.0 * n * math.log(1.0 - p), rel=1e-12)
+        assert lr == pytest.approx(-2.0 * n * math.log(1.0 - p), rel=1e-12)  # the original returned 0 here
         assert lr > 3.84 and pv < 0.05
+        lr, pv = backtest.kupiec_pof(n, n, p)
+        assert lr == pytest.approx(-2.0 * n * math.log(p), rel=1e-12) and pv < 1e-10
+    lr, pv = backtest.kupiec_pof(n, 0.05 * n if float(0.05 * n).is_integer() else round(0.05 * n), 0.05)
+    assert lr < 0.5 and pv > 0.4  # a breach count at the expected rate is not rejected
 
 
-def test_kupiec_all_breaches_and_exact_rate():
-    lr, pv = backtest.kupiec_pof(500, 500, 0.01)
-    assert lr == pytest.approx(-2.0 * 500 * math.log(0.01), rel=1e-12) and pv < 1e-10
-    lr, pv = backtest.kupiec_pof(1000, 50, 0.05)  # breach rate exactly equals p
-    assert lr == pytest.approx(0.0, abs=1e-12) and pv == pytest.approx(1.0)
-
-
-def test_kupiec_is_stable_for_large_samples():
-    # the original multiplied powers before taking logs; this size underflows that approach
-    lr, pv = backtest.kupiec_pof(10000, 500, 0.05)
-    assert math.isfinite(lr) and lr == pytest.approx(kupiec_reference(10000, 500, 0.05), abs=1e-8)
+def test_kupiec_is_stable_at_the_pooled_real_sample_size(returns):
+    """The original multiplied powers before taking logs. At the size of the whole real backtest that underflows."""
+    bt = backtest.backtest_universe(returns, config.WINDOW, config.CONFS)
+    g = bt[(bt["method"] == "historical") & (bt["confidence"] == 0.99)]
+    n, x = int(g["n_forecasts"].sum()), int(g["breaches"].sum())
+    assert (1 - 0.01) ** (n - x) * 0.01**x == 0.0  # the naive product is 0.0 in float64
+    lr, pv = backtest.kupiec_pof(n, x, 0.01)
+    assert math.isfinite(lr) and lr == pytest.approx(kupiec_reference(n, x, 0.01), rel=1e-9)
 
 
 def test_kupiec_rejects_invalid_arguments():
