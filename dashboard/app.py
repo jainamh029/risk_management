@@ -22,41 +22,71 @@ sys.path.insert(0, str(ROOT))
 from riskengine import backtest, config, data, ml, portfolio, var  # noqa: E402
 from riskengine.metrics import TRADING_DAYS  # noqa: E402
 
-BLUE, LIGHT_BLUE, AMBER, RED, SLATE = "#1E40AF", "#3B82F6", "#D97706", "#DC2626", "#64748B"
+# Trading-terminal palette: a deep navy background like a charting screen, green for gains, red for losses.
+# Every text and chart colour below has a contrast ratio of at least 4.5:1 against the panel it is drawn on (tests/integration/test_dashboard_theme.py).
+BG, PANEL, BORDER, GRID = "#0B1220", "#0F1A2E", "#22304D", "#1E2B47"
+INK, MUTED = "#E5E7EB", "#94A3B8"
+GREEN, RED, BLUE, LIGHT_BLUE, AMBER, SLATE = "#22C55E", "#F43F5E", "#38BDF8", "#7DD3FC", "#FBBF24", "#94A3B8"
 st.set_page_config(page_title="Risk dashboard", layout="wide")
 
 st.markdown(
     """
 <style>
-  /* Layout. The font is left to Streamlit's bundled default, which also keeps its icon font working */
-  .block-container {padding-top: 2rem; padding-bottom: 3rem; max-width: 1400px;}
-  h1 {font-weight: 750; letter-spacing: -0.02em; color: #0F172A; border-left: 6px solid #1E40AF; padding-left: 0.75rem; line-height: 1.15;}
-  h2, h3 {color: #0F172A; letter-spacing: -0.01em;}
-  [data-testid="stCaptionContainer"] {color: #475569;}
+  :root {--bg: #0B1220; --panel: #0F1A2E; --panel2: #142038; --border: #22304D; --ink: #E5E7EB; --muted: #94A3B8; --up: #22C55E; --down: #F43F5E; --accent: #38BDF8;}
+
+  /* Screen: deep navy with a faint chart grid and two soft glows, like a trading terminal */
+  .stApp, [data-testid="stAppViewContainer"] {
+    background:
+      radial-gradient(1100px 420px at 10% -8%, rgba(56, 189, 248, 0.11), transparent 60%),
+      radial-gradient(900px 380px at 100% 0%, rgba(34, 197, 94, 0.08), transparent 55%),
+      linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+      #0B1220;
+    background-size: auto, auto, 44px 44px, 44px 44px, auto;
+  }
+  [data-testid="stHeader"] {background: transparent;}
+  .block-container {padding-top: 1.6rem; padding-bottom: 3rem; max-width: 1400px;}
+  h1 {font-weight: 750; letter-spacing: -0.02em; color: var(--ink); border-left: 6px solid var(--up); padding-left: 0.75rem; line-height: 1.15;}
+  h2, h3 {color: var(--ink); letter-spacing: -0.01em;}
+  [data-testid="stCaptionContainer"] {color: var(--muted);}
+
+  /* Price tape across the top */
+  .tape {display: flex; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin: 0 0 1.1rem 0; background: linear-gradient(180deg, #111E37, #0C1628); font-variant-numeric: tabular-nums; scrollbar-width: thin;}
+  .tape > div {white-space: nowrap; padding: 0.55rem 0.95rem; border-right: 1px solid var(--border); font-size: 0.9rem; flex: 0 0 auto;}
+  .tape > div:last-child {border-right: none;}
+  .tape .lbl {color: var(--muted); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center;}
+  .tape .sym {font-weight: 700; color: var(--ink); margin-right: 0.5rem;}
+  .tape .px {color: var(--ink); margin-right: 0.45rem;}
+  .tape .up {color: var(--up); font-weight: 600;}
+  .tape .dn {color: var(--down); font-weight: 600;}
+  .tape .flat {color: var(--muted); font-weight: 600;}
+  .tape:focus-visible {outline: 3px solid var(--accent); outline-offset: 2px;}
 
   /* Metric cards */
-  [data-testid="stMetric"] {background: #FFFFFF; border: 1px solid #DBEAFE; border-top: 3px solid #1E40AF; border-radius: 10px; padding: 0.85rem 1rem 0.8rem 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);}
-  [data-testid="stMetricLabel"] {color: #475569; font-size: 0.82rem; font-weight: 600; text-transform: none;}
-  [data-testid="stMetricValue"] {color: #0F172A; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.7rem;}
+  [data-testid="stMetric"] {background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 10px; padding: 0.85rem 1rem 0.8rem 1rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);}
+  [data-testid="stMetricLabel"] {color: var(--muted); font-size: 0.82rem; font-weight: 600;}
+  [data-testid="stMetricValue"] {color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.7rem;}
   [data-testid="stMetricValue"] > div {white-space: normal; overflow: visible; text-overflow: clip;}
   [data-testid="stMetricDelta"] {font-size: 0.8rem;}
 
   /* Tabs */
-  .stTabs [data-baseweb="tab-list"] {gap: 0.25rem; border-bottom: 1px solid #DBEAFE;}
-  .stTabs [data-baseweb="tab"] {padding: 0.65rem 1rem; font-weight: 600; color: #334155; border-radius: 8px 8px 0 0; transition: background-color 150ms ease, color 150ms ease;}
-  .stTabs [data-baseweb="tab"]:hover {background: #E9EEF6; color: #1E40AF;}
-  .stTabs [aria-selected="true"] {color: #1E40AF;}
+  .stTabs [data-baseweb="tab-list"] {gap: 0.25rem; border-bottom: 1px solid var(--border);}
+  .stTabs [data-baseweb="tab"] {padding: 0.65rem 1rem; font-weight: 600; color: var(--muted); border-radius: 8px 8px 0 0; transition: background-color 150ms ease, color 150ms ease;}
+  .stTabs [data-baseweb="tab"]:hover {background: var(--panel2); color: var(--ink);}
+  .stTabs [aria-selected="true"] {color: var(--up);}
+  .stTabs [data-baseweb="tab-highlight"] {background-color: var(--up);}
 
   /* Charts, tables and panels */
-  [data-testid="stPlotlyChart"] {background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 0.25rem; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);}
-  [data-testid="stDataFrame"] {border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden;}
-  [data-testid="stExpander"] {border: 1px solid #DBEAFE; border-radius: 10px; background: #FFFFFF;}
+  [data-testid="stPlotlyChart"] {background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.25rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.30);}
+  [data-testid="stDataFrame"] {border: 1px solid var(--border); border-radius: 10px; overflow: hidden;}
+  [data-testid="stExpander"] {border: 1px solid var(--border); border-radius: 10px; background: var(--panel);}
   [data-testid="stAlert"] {border-radius: 10px;}
-  hr {border-color: #DBEAFE;}
+  hr {border-color: var(--border);}
+  code {color: var(--accent);}
 
   /* Keyboard focus and reduced motion */
-  button:focus-visible, [role="tab"]:focus-visible, input:focus-visible {outline: 3px solid #1E40AF !important; outline-offset: 2px;}
-  @media (prefers-reduced-motion: reduce) {* {animation: none !important; transition: none !important;}}
+  button:focus-visible, [role="tab"]:focus-visible, input:focus-visible {outline: 3px solid var(--accent) !important; outline-offset: 2px;}
+  @media (prefers-reduced-motion: reduce) {* {animation: none !important; transition: none !important; scroll-behavior: auto !important;}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -149,12 +179,12 @@ def line_chart_layout(fig, title, yfmt=".1%", ytitle=None, height=430):
         margin=dict(l=10, r=10, t=100, b=10),
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
-        plot_bgcolor="#FFFFFF",
-        paper_bgcolor="#F8FAFC",
-        font=dict(color="#1E293B"),
+        plot_bgcolor=PANEL,
+        paper_bgcolor=PANEL,
+        font=dict(color=INK),
     )
-    fig.update_yaxes(tickformat=yfmt, title=ytitle, gridcolor="#E2E8F0")
-    fig.update_xaxes(gridcolor="#E2E8F0")
+    fig.update_yaxes(tickformat=yfmt, title=ytitle, gridcolor=GRID)
+    fig.update_xaxes(gridcolor=GRID)
     return fig
 
 
@@ -175,7 +205,44 @@ def test_period_growth(pf):
     return pd.DataFrame(curves)
 
 
+def themed(fig):
+    """Dark chart surface in the same palette as the page. Applied to every chart just before it is shown."""
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor=PANEL,
+        plot_bgcolor=PANEL,
+        font=dict(color=INK),
+        hoverlabel=dict(bgcolor="#1B2A47", bordercolor=BORDER, font=dict(color=INK)),
+        legend=dict(font=dict(color=INK)),
+    )
+    fig.update_xaxes(gridcolor=GRID, zerolinecolor=BORDER, linecolor=BORDER)
+    fig.update_yaxes(gridcolor=GRID, zerolinecolor=BORDER, linecolor=BORDER)
+    return fig
+
+
+TAPE_TICKERS = ["SPY", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "XOM", "BRK-B", "UNH", "V", "LLY"]
+
+
+def price_tape(prices):
+    """HTML for a strip of last closes and one-day changes of large tickers, from the stored prices. A direction is shown by an arrow and a sign as well as by colour."""
+    last = prices.index[-1]
+    items = []
+    for t in TAPE_TICKERS:
+        if t not in prices.columns:
+            continue
+        sr = prices[t].dropna()
+        if len(sr) < 2 or sr.index[-1] != last:  # a ticker that did not trade on the last date is left out, not carried forward
+            continue
+        chg = sr.iloc[-1] / sr.iloc[-2] - 1.0
+        cls, arrow = ("up", "&#9650;") if chg > 0 else (("dn", "&#9660;") if chg < 0 else ("flat", "&#9644;"))
+        word = "up" if chg > 0 else ("down" if chg < 0 else "unchanged")
+        items.append(f'<div aria-label="{t} {sr.iloc[-1]:,.2f}, {word} {abs(chg):.2%}"><span class="sym">{t}</span><span class="px">{sr.iloc[-1]:,.2f}</span><span class="{cls}">{arrow} {chg:+.2%}</span></div>')
+    label = f'<div class="lbl" title="Adjusted close on {last.date()} and its change from the previous trading day">Close {last.date()}</div>'
+    return f'<div class="tape" role="region" aria-label="Latest adjusted closing prices" tabindex="0">{label}{"".join(items)}</div>'
+
+
 # ----------------------------------------------------------------------------- header
+st.markdown(price_tape(prices), unsafe_allow_html=True)
 st.title("Risk dashboard")
 st.caption(
     f"Real daily prices from Yahoo Finance, {meta['first_date']} to {meta['last_date']}, downloaded {meta['downloaded_utc']}. "
@@ -206,18 +273,18 @@ with tab_over:
     for col in growth.columns:
         figg.add_trace(go.Scatter(x=growth.index, y=growth[col], name=col, line=styles_g.get(col, dict(color=LIGHT_BLUE, width=2)), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>" + col + "</extra>"))
     panel_layout(figg, f"Growth of 1 since {R['portfolios']['test_start']} (test period)", yfmt=".2f", ytitle="growth of 1")
-    ch1.plotly_chart(figg, width="stretch", key="ov_growth")
+    ch1.plotly_chart(themed(figg), width="stretch", key="ov_growth")
     ch1.caption("Daily constant-weight rebalancing, no transaction costs, one period and one split. Weights were fixed with training data only.")
     bt_all = R["by_ticker"][R["by_ticker"]["confidence"] == ov_conf]
     figh = go.Figure()
     size = 0.0025 if ov_conf == 0.99 else 0.005
     for m, color, shape in zip(var.METHODS, (BLUE, AMBER), ("/", "x")):
         figh.add_trace(go.Histogram(x=bt_all[bt_all["method"] == m]["breach_rate"], xbins=dict(start=0, size=size), name=m, opacity=0.65, marker=dict(color=color, pattern=dict(shape=shape)), hovertemplate="breach rate %{x:.2%}: %{y} tickers<extra>" + m + "</extra>"))
-    figh.add_vline(x=1 - ov_conf, line=dict(color="#000000", dash="dash", width=2), annotation_text=f"expected {1 - ov_conf:.0%}", annotation_position="top right")
+    figh.add_vline(x=1 - ov_conf, line=dict(color=INK, dash="dash", width=2), annotation_text=f"expected {1 - ov_conf:.0%}", annotation_position="top right")
     panel_layout(figh, f"Breach rate of each ticker at {ov_conf_label}", yfmt="d", ytitle="number of tickers")
     figh.update_layout(barmode="overlay", hovermode="closest")
     figh.update_xaxes(tickformat=".1%", title="share of forecast days with a breach")
-    ch2.plotly_chart(figh, width="stretch", key="ov_breach_hist")
+    ch2.plotly_chart(themed(figh), width="stretch", key="ov_breach_hist")
     with st.expander("Data table: growth of 1 and per-ticker breach rates behind these charts"):
         st.dataframe(growth.round(6), width="stretch")
         st.dataframe(bt_all[["ticker", "method", "n_forecasts", "breaches", "breach_rate"]].sort_values("breach_rate", ascending=False), width="stretch", hide_index=True)
@@ -282,8 +349,8 @@ with tab_stock:
         fig_map.add_trace(
             go.Scatter(
                 x=g["annual_vol"], y=g["mean_annual_return"], mode="markers", name=label, text=g["ticker"],
-                marker=dict(symbol=symbol, size=9 if is_etf_flag else 7, color=g["sharpe"], colorscale=[[0, "#B45309"], [0.5, "#E2E8F0"], [1, "#1E40AF"]], cmin=-1.0, cmax=2.0, cmid=0.5,
-                            line=dict(width=0.6, color="#475569"), opacity=0.85, showscale=not is_etf_flag or shown[~shown["is_etf"]].empty,
+                marker=dict(symbol=symbol, size=11 if is_etf_flag else 8, color=g["sharpe"], colorscale=[[0, RED], [0.5, "#94A3B8"], [1, GREEN]], cmin=-1.0, cmax=2.0, cmid=0.5,
+                            line=dict(width=0.6, color="#0B1220"), opacity=0.92, showscale=not is_etf_flag or shown[~shown["is_etf"]].empty,
                             colorbar=dict(title="Sharpe", thickness=12, len=0.8)),
                 customdata=np.stack([g["sharpe"], g["max_drawdown"], g["beta_vs_spy"]], axis=1),
                 hovertemplate="<b>%{text}</b><br>return %{y:.1%}, volatility %{x:.1%}<br>Sharpe %{customdata[0]:.2f}, max drawdown %{customdata[1]:.1%}<extra>" + label + "</extra>",
@@ -303,7 +370,7 @@ with tab_stock:
         fig_map.update_xaxes(range=[max(0.0, x0 - px_), x1 + px_])
         fig_map.update_yaxes(range=[y0 - py_, y1 + py_])
         outside = int(((shown["annual_vol"] < max(0.0, x0 - px_)) | (shown["annual_vol"] > x1 + px_) | (shown["mean_annual_return"] < y0 - py_) | (shown["mean_annual_return"] > y1 + py_)).sum())
-    st.plotly_chart(fig_map, width="stretch", key="se_map")
+    st.plotly_chart(themed(fig_map), width="stretch", key="se_map")
     if outside:
         st.caption(f"{outside} ticker(s) lie outside the zoomed view. Untick the zoom option to see them; they are all in the data table below.")
     st.caption("Colour shows the Sharpe ratio and shape shows stocks (circles) or ETFs (diamonds), so neither relies on colour alone. Up and to the left is more return for less risk, in this sample only.")
@@ -337,25 +404,25 @@ with tab_stock:
         c1, c2 = st.columns(2)
         f1 = go.Figure(go.Scatter(x=growth_s.index, y=growth_s, name=sel, line=dict(color=BLUE, width=2), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>growth of 1</extra>"))
         panel_layout(f1, f"{sel}: growth of 1 (adjusted close)", yfmt=".2f", ytitle="growth of 1")
-        c1.plotly_chart(f1, width="stretch", key="se_growth")
-        f2 = go.Figure(go.Scatter(x=drawdown.index, y=drawdown, name="drawdown", fill="tozeroy", line=dict(color=RED, width=1.5), fillcolor="rgba(220, 38, 38, 0.18)", hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra>drawdown</extra>"))
+        c1.plotly_chart(themed(f1), width="stretch", key="se_growth")
+        f2 = go.Figure(go.Scatter(x=drawdown.index, y=drawdown, name="drawdown", fill="tozeroy", line=dict(color=RED, width=1.5), fillcolor="rgba(244, 63, 94, 0.20)", hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra>drawdown</extra>"))
         panel_layout(f2, f"{sel}: fall from the previous peak", yfmt=".0%", ytitle="drawdown")
-        c2.plotly_chart(f2, width="stretch", key="se_drawdown")
+        c2.plotly_chart(themed(f2), width="stretch", key="se_drawdown")
         c3, c4 = st.columns(2)
         f3 = go.Figure(go.Scatter(x=roll_vol.index, y=roll_vol, name="60-day volatility", line=dict(color=AMBER, width=2), hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra>60-day volatility</extra>"))
         panel_layout(f3, f"{sel}: 60-day rolling volatility (annualised)", yfmt=".0%", ytitle="annualised volatility")
-        c3.plotly_chart(f3, width="stretch", key="se_rollvol")
+        c3.plotly_chart(themed(f3), width="stretch", key="se_rollvol")
         mu_r, sd_r = float(rets.mean()), float(rets.std(ddof=1))
         v99, _ = var.historical_var_es(rets.to_numpy(), 0.99)
         bins = 60
-        f4 = go.Figure(go.Histogram(x=rets, nbinsx=bins, histnorm="probability density", name="daily returns", marker=dict(color=LIGHT_BLUE, line=dict(width=0.3, color="#FFFFFF")), opacity=0.8, hovertemplate="return %{x:.2%}<extra>daily returns</extra>"))
+        f4 = go.Figure(go.Histogram(x=rets, nbinsx=bins, histnorm="probability density", name="daily returns", marker=dict(color=LIGHT_BLUE, line=dict(width=0.3, color=PANEL)), opacity=0.8, hovertemplate="return %{x:.2%}<extra>daily returns</extra>"))
         xs = np.linspace(float(rets.min()), float(rets.max()), 300)
-        f4.add_trace(go.Scatter(x=xs, y=np.exp(-0.5 * ((xs - mu_r) / sd_r) ** 2) / (sd_r * np.sqrt(2 * np.pi)), name="normal curve, same mean and standard deviation", line=dict(color="#0F172A", width=2, dash="dash"), hoverinfo="skip"))
+        f4.add_trace(go.Scatter(x=xs, y=np.exp(-0.5 * ((xs - mu_r) / sd_r) ** 2) / (sd_r * np.sqrt(2 * np.pi)), name="normal curve, same mean and standard deviation", line=dict(color=INK, width=2, dash="dash"), hoverinfo="skip"))
         f4.add_vline(x=-v99, line=dict(color=RED, dash="dot", width=2), annotation_text=f"historical 99% VaR {v99:.1%}", annotation_position="top left")
         panel_layout(f4, f"{sel}: distribution of daily returns", yfmt=".0f", ytitle="density")
         f4.update_layout(hovermode="closest")
         f4.update_xaxes(tickformat=".0%", title="daily return")
-        c4.plotly_chart(f4, width="stretch", key="se_hist")
+        c4.plotly_chart(themed(f4), width="stretch", key="se_hist")
         st.caption(
             f"{len(rets):,} daily returns from {rets.index[0].date()} to {rets.index[-1].date()}. Skewness {rets.skew():.2f}, excess kurtosis {rets.kurt():.2f}: "
             "an excess kurtosis above zero means more extreme days than the normal curve allows, which is why a normal VaR can understate tail risk."
@@ -388,7 +455,7 @@ with tab_var:
             st.warning(f"With a {window}-day window, a {conf_label} VaR rests on about {(1 - conf) * window:.1f} days in the tail. It will be noisy.")
         fig = go.Figure()
         loss = (-r).dropna()
-        fig.add_trace(go.Scatter(x=loss.index, y=loss, mode="lines", name="Daily loss (negative = gain)", line=dict(color="#94A3B8", width=1), hovertemplate="%{x|%Y-%m-%d}: %{y:.2%}<extra>daily loss</extra>"))
+        fig.add_trace(go.Scatter(x=loss.index, y=loss, mode="lines", name="Daily loss (negative = gain)", line=dict(color=SLATE, width=1), hovertemplate="%{x|%Y-%m-%d}: %{y:.2%}<extra>daily loss</extra>"))
         styles = {"historical": dict(color=BLUE, dash="solid", symbol="circle-open"), "normal": dict(color=AMBER, dash="dash", symbol="x")}
         rows, breach_tables = [], []
         for m in methods:
@@ -409,7 +476,7 @@ with tab_var:
         line_chart_layout(fig, f"{ticker}: daily loss, {conf_label} VaR forecast and breaches", ytitle="loss as a fraction of position")
         fig.update_layout(height=560, margin=dict(l=10, r=10, t=110, b=150), legend=dict(orientation="h", yanchor="top", y=-0.42, x=0))
         fig.update_xaxes(rangeslider_visible=True, rangeselector=dict(x=0, y=1.02, yanchor="bottom", buttons=[dict(count=1, label="1y", step="year", stepmode="backward"), dict(count=2, label="2y", step="year", stepmode="backward"), dict(step="all", label="all")]))
-        st.plotly_chart(fig, width="stretch", key="var_chart")
+        st.plotly_chart(themed(fig), width="stretch", key="var_chart")
         st.caption("Drag on the chart to zoom, double-click to reset. Breaches are marked by symbol (open circle: historical, cross: normal) as well as colour.")
 
         tbl = pd.DataFrame(rows)
@@ -444,10 +511,10 @@ with tab_bt:
         s["label"] = s["method"] + " " + (s["confidence"] * 100).astype(int).astype(str) + "%"
         fig = go.Figure()
         fig.add_trace(go.Bar(x=s["label"], y=s["pooled_breach_rate"], name="Observed breach rate", marker=dict(color=BLUE, pattern=dict(shape="/")), hovertemplate="%{x}: %{y:.2%}<extra>observed</extra>"))
-        fig.add_trace(go.Scatter(x=s["label"], y=s["expected_rate"], mode="markers", name="Expected by a correct model", marker=dict(color="#000000", symbol="line-ew", size=40, line=dict(width=3, color="#000000")), hovertemplate="%{x}: %{y:.2%}<extra>expected</extra>"))
+        fig.add_trace(go.Scatter(x=s["label"], y=s["expected_rate"], mode="markers", name="Expected by a correct model", marker=dict(color=INK, symbol="line-ew", size=40, line=dict(width=3, color=INK)), hovertemplate="%{x}: %{y:.2%}<extra>expected</extra>"))
         line_chart_layout(fig, "Pooled breach rate against expected", ytitle="share of forecast days with a breach")
         fig.update_layout(hovermode="closest")
-        st.plotly_chart(fig, width="stretch", key="bt_bar")
+        st.plotly_chart(themed(fig), width="stretch", key="bt_bar")
         show = s[["label", "n_tickers", "total_forecasts", "pooled_breach_rate", "expected_rate", "share_rejected", "zero_breach_tickers"]].rename(
             columns={"label": "Method", "n_tickers": "Tickers", "total_forecasts": "Forecasts", "pooled_breach_rate": "Pooled breach rate", "expected_rate": "Expected", "share_rejected": "Share rejected (Kupiec, 5%)", "zero_breach_tickers": "Tickers with zero breaches"}
         )
@@ -459,10 +526,10 @@ with tab_bt:
         for m, shape in zip(sel_methods, ["/", "x", "."]):
             fig2.add_trace(go.Histogram(x=bt[bt["method"] == m]["kupiec_p"], xbins=dict(start=0, end=1, size=0.05), name=m, opacity=0.6, marker=dict(color=BLUE if m == "historical" else AMBER, pattern=dict(shape=shape))))
         fig2.add_vline(x=0.05, line=dict(color=RED, dash="dash"), annotation_text="p = 0.05")
-        fig2.update_layout(barmode="overlay", title="Kupiec p-values across tickers (a correct model gives values spread evenly from 0 to 1)", height=360, margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor="#FFFFFF", paper_bgcolor="#F8FAFC")
+        fig2.update_layout(barmode="overlay", title="Kupiec p-values across tickers (a correct model gives values spread evenly from 0 to 1)", height=360, margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor=PANEL, paper_bgcolor=PANEL)
         fig2.update_xaxes(title="p-value")
         fig2.update_yaxes(title="number of ticker-confidence results")
-        st.plotly_chart(fig2, width="stretch", key="bt_hist")
+        st.plotly_chart(themed(fig2), width="stretch", key="bt_hist")
 
         if only_rej:
             bt = bt[bt["kupiec_p"] < 0.05]
@@ -487,9 +554,9 @@ def show_portfolio(name, e, bench, key):
     w = pd.Series(e["weights"]).sort_values()
     a, b = st.columns([1, 1.6])
     figw = go.Figure(go.Bar(x=w.values, y=w.index, orientation="h", marker=dict(color=BLUE), hovertemplate="%{y}: %{x:.1%}<extra>weight</extra>"))
-    figw.update_layout(title="Weights (set with training data only)", height=max(320, 26 * len(w) + 90), margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor="#FFFFFF", paper_bgcolor="#F8FAFC")
-    figw.update_xaxes(tickformat=".0%", gridcolor="#E2E8F0")
-    a.plotly_chart(figw, width="stretch", key=f"{key}_w")
+    figw.update_layout(title="Weights (set with training data only)", height=max(320, 26 * len(w) + 90), margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor=PANEL, paper_bgcolor=PANEL)
+    figw.update_xaxes(tickformat=".0%", gridcolor=GRID)
+    a.plotly_chart(themed(figw), width="stretch", key=f"{key}_w")
     test = returns.dropna(how="all").loc[config.TEST_START :]
     wt = pd.Series(e["weights"])
     d_p, _ = portfolio.portfolio_returns(test, wt)
@@ -500,7 +567,7 @@ def show_portfolio(name, e, bench, key):
     spy = test[config.MARKET].fillna(0)
     figg.add_trace(go.Scatter(x=spy.index, y=(1 + spy).cumprod(), name="SPY", line=dict(color=SLATE, dash="dot", width=2), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>SPY</extra>"))
     line_chart_layout(figg, "Growth of 1 over the test period (no transaction costs)", yfmt=".2f", ytitle="growth of 1", height=max(320, 26 * len(w) + 90))
-    b.plotly_chart(figg, width="stretch", key=f"{key}_g")
+    b.plotly_chart(themed(figg), width="stretch", key=f"{key}_g")
     i, o, q = e["in_sample_train"], e["out_of_sample_test"], e["equal_weight_same_holdings_test"]
     stats = pd.DataFrame(
         {
@@ -517,14 +584,14 @@ def show_portfolio(name, e, bench, key):
     show_values = len(corr) <= 12
     figc = go.Figure(
         go.Heatmap(
-            z=corr.to_numpy(), x=list(corr.columns), y=list(corr.index), zmin=-1, zmax=1, zmid=0, colorscale=[[0, "#B45309"], [0.5, "#F8FAFC"], [1, "#1E40AF"]],
+            z=corr.to_numpy(), x=list(corr.columns), y=list(corr.index), zmin=-1, zmax=1, zmid=0, colorscale=[[0, AMBER], [0.5, "#1E293B"], [1, BLUE]],
             colorbar=dict(title="correlation", thickness=12), hovertemplate="%{y} and %{x}: %{z:.2f}<extra></extra>",
             **({"text": np.round(corr.to_numpy(), 2), "texttemplate": "%{text}", "textfont": dict(size=11)} if show_values else {}),
         )
     )
-    figc.update_layout(title=dict(text="Correlation of the holdings' daily returns in the training period", x=0, xanchor="left", font=dict(size=15)), height=max(380, 34 * len(corr) + 140), margin=dict(l=10, r=10, t=60, b=10), plot_bgcolor="#FFFFFF", paper_bgcolor="#F8FAFC", font=dict(color="#1E293B"))
+    figc.update_layout(title=dict(text="Correlation of the holdings' daily returns in the training period", x=0, xanchor="left", font=dict(size=15)), height=max(380, 34 * len(corr) + 140), margin=dict(l=10, r=10, t=60, b=10), plot_bgcolor=PANEL, paper_bgcolor=PANEL, font=dict(color="#1E293B"))
     figc.update_yaxes(autorange="reversed")
-    st.plotly_chart(figc, width="stretch", key=f"{key}_corr")
+    st.plotly_chart(themed(figc), width="stretch", key=f"{key}_corr")
     st.caption("Correlations close to 1 mean the holdings move together, so the portfolio is less diversified than its number of holdings suggests. Computed on the data used to choose the weights.")
     with st.expander("Data table: weights, growth of 1 and correlations behind the charts"):
         st.dataframe(pd.DataFrame({"weight": w.iloc[::-1]}), width="stretch")
@@ -604,16 +671,16 @@ with tab_ml:
     chosen = st.multiselect("Models in the chart", ["random_forest", "gradient_boosting", "ensemble"], default=["ensemble"], key="ml_models")
     figi = go.Figure()
     dash = {"random_forest": "solid", "gradient_boosting": "dash", "ensemble": "dot"}
-    colr = {"random_forest": BLUE, "gradient_boosting": AMBER, "ensemble": "#0F172A"}
+    colr = {"random_forest": BLUE, "gradient_boosting": AMBER, "ensemble": INK}
     ic_df = R["ml_ic"].set_index("date")
     for m in chosen:
         figi.add_trace(go.Scatter(x=ic_df.index, y=ic_df[m], name=m.replace("_", " "), line=dict(color=colr[m], dash=dash[m], width=1.6), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>" + m + "</extra>"))
     if "ensemble" in chosen:
         indep = ml.nonoverlapping(ic_df["ensemble"], prices.index)
         figi.add_trace(go.Scatter(x=indep.index, y=indep, mode="markers", name="ensemble, independent periods", marker=dict(color=RED, size=9, symbol="diamond"), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>independent period</extra>"))
-    figi.add_hline(y=0, line=dict(color="#000000", width=1))
+    figi.add_hline(y=0, line=dict(color=INK, width=1))
     line_chart_layout(figi, "Rank IC by date: correlation between forecast and realised 63-day return across stocks", yfmt=".2f", ytitle="rank IC")
-    st.plotly_chart(figi, width="stretch", key="ml_ic_chart")
+    st.plotly_chart(themed(figi), width="stretch", key="ml_ic_chart")
     st.caption("Above zero means stocks forecast to do better did better. Neighbouring dates share most of their 63-day window, so only the diamonds are independent.")
     with st.expander("Data table: rank IC by date and feature importance behind the charts"):
         st.dataframe(ic_df[chosen] if chosen else ic_df, width="stretch")
@@ -621,9 +688,9 @@ with tab_ml:
 
     imp = R["ml_imp"].sort_values()
     figf = go.Figure(go.Bar(x=imp.values, y=imp.index, orientation="h", marker=dict(color=BLUE)))
-    figf.update_layout(title="Random-forest feature importance (final model)", height=360, margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor="#FFFFFF", paper_bgcolor="#F8FAFC")
-    figf.update_xaxes(gridcolor="#E2E8F0")
-    st.plotly_chart(figf, width="stretch", key="ml_imp_chart")
+    figf.update_layout(title="Random-forest feature importance (final model)", height=360, margin=dict(l=10, r=10, t=50, b=10), plot_bgcolor=PANEL, paper_bgcolor=PANEL)
+    figf.update_xaxes(gridcolor=GRID)
+    st.plotly_chart(themed(figf), width="stretch", key="ml_imp_chart")
 
     st.subheader(f"Latest forecasts (features as of {mi['latest_feature_date']})")
     st.warning("These are model outputs with the out-of-sample accuracy shown above. They are not recommendations.")

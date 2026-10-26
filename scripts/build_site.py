@@ -32,7 +32,11 @@ sys.path.insert(0, str(ROOT))
 
 from riskengine import config, data, ml, portfolio, var  # noqa: E402
 
-BLUE, LIGHT_BLUE, AMBER, RED, SLATE = "#1E40AF", "#3B82F6", "#D97706", "#DC2626", "#64748B"
+# the same trading-terminal palette as dashboard/app.py
+BG, PANEL, BORDER, GRID = "#0B1220", "#0F1A2E", "#22304D", "#1E2B47"
+INK, MUTED = "#E5E7EB", "#94A3B8"
+GREEN, RED, BLUE, LIGHT_BLUE, AMBER, SLATE = "#22C55E", "#F43F5E", "#38BDF8", "#7DD3FC", "#FBBF24", "#94A3B8"
+TAPE_TICKERS = ["SPY", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "XOM", "BRK-B", "UNH", "V", "LLY"]
 DEFAULT_OUT = ROOT / "docs"
 REPO = "https://github.com/jainamh029/risk_management"
 
@@ -52,18 +56,37 @@ def layout(fig, title, yfmt=".1%", ytitle=None, height=400):
         margin=dict(l=10, r=10, t=90, b=10),
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
-        plot_bgcolor="#FFFFFF",
-        paper_bgcolor="#FFFFFF",
-        font=dict(color="#1E293B"),
+        template="plotly_dark",
+        plot_bgcolor=PANEL,
+        paper_bgcolor=PANEL,
+        font=dict(color=INK),
+        hoverlabel=dict(bgcolor="#1B2A47", bordercolor=BORDER, font=dict(color=INK)),
     )
-    fig.update_yaxes(tickformat=yfmt, title=ytitle, gridcolor="#E2E8F0")
-    fig.update_xaxes(gridcolor="#E2E8F0")
+    fig.update_yaxes(tickformat=yfmt, title=ytitle, gridcolor=GRID)
+    fig.update_xaxes(gridcolor=GRID)
     return fig
 
 
 def chart(fig, div_id):
     # explicit ids keep the output identical from one build to the next
     return fig.to_html(full_html=False, include_plotlyjs=False, div_id=div_id, config={"responsive": True, "displaylogo": False})
+
+
+def price_tape(prices):
+    """Strip of last closes and one-day changes of large tickers (same as the dashboard); direction is also given by arrow and sign."""
+    last = prices.index[-1]
+    items = []
+    for t in TAPE_TICKERS:
+        if t not in prices.columns:
+            continue
+        sr = prices[t].dropna()
+        if len(sr) < 2 or sr.index[-1] != last:
+            continue
+        chg = sr.iloc[-1] / sr.iloc[-2] - 1.0
+        cls, arrow = ("up", "&#9650;") if chg > 0 else (("dn", "&#9660;") if chg < 0 else ("flat", "&#9644;"))
+        word = "up" if chg > 0 else ("down" if chg < 0 else "unchanged")
+        items.append(f'<div aria-label="{t} {sr.iloc[-1]:,.2f}, {word} {abs(chg):.2%}"><span class="sym">{t}</span><span class="px">{sr.iloc[-1]:,.2f}</span><span class="{cls}">{arrow} {chg:+.2%}</span></div>')
+    return f'<div class="tape" role="region" aria-label="Latest adjusted closing prices" tabindex="0"><div class="lbl" title="Adjusted close on {last.date()} and its change from the previous trading day">Close {last.date()}</div>{"".join(items)}</div>'
 
 
 def table(frame, caption):
@@ -94,14 +117,14 @@ def build() -> str:
     fig1 = go.Figure()
     labels = [f"{m} {int(c * 100)}%" for m, c in zip(summary["method"], summary["confidence"])]
     fig1.add_trace(go.Bar(x=labels, y=summary["pooled_breach_rate"], name="Observed breach rate", marker=dict(color=BLUE, pattern=dict(shape="/")), hovertemplate="%{x}: %{y:.2%}<extra>observed</extra>"))
-    fig1.add_trace(go.Scatter(x=labels, y=summary["expected_rate"], mode="markers", name="Expected by a correct model", marker=dict(color="#000000", symbol="line-ew", size=40, line=dict(width=3, color="#000000")), hovertemplate="%{x}: %{y:.2%}<extra>expected</extra>"))
+    fig1.add_trace(go.Scatter(x=labels, y=summary["expected_rate"], mode="markers", name="Expected by a correct model", marker=dict(color=INK, symbol="line-ew", size=40, line=dict(width=3, color=INK)), hovertemplate="%{x}: %{y:.2%}<extra>expected</extra>"))
     layout(fig1, "Pooled breach rate against the expected rate", ytitle="share of forecast days with a breach").update_layout(hovermode="closest")
 
     bt99 = by_ticker[by_ticker["confidence"] == 0.99]
     fig2 = go.Figure()
     for m, color, shape in zip(var.METHODS, (BLUE, AMBER), ("/", "x")):
         fig2.add_trace(go.Histogram(x=bt99[bt99["method"] == m]["breach_rate"], xbins=dict(start=0, size=0.0025), name=m, opacity=0.65, marker=dict(color=color, pattern=dict(shape=shape)), hovertemplate="breach rate %{x:.2%}: %{y} tickers<extra>" + m + "</extra>"))
-    fig2.add_vline(x=0.01, line=dict(color="#000000", dash="dash", width=2), annotation_text="expected 1%", annotation_position="top right")
+    fig2.add_vline(x=0.01, line=dict(color=INK, dash="dash", width=2), annotation_text="expected 1%", annotation_position="top right")
     layout(fig2, "Breach rate of each ticker at 99%", yfmt="d", ytitle="number of tickers").update_layout(barmode="overlay", hovermode="closest")
     fig2.update_xaxes(tickformat=".1%", title="share of forecast days with a breach")
 
@@ -115,7 +138,7 @@ def build() -> str:
             fig3.add_trace(go.Scatter(x=g.index, y=g, name=f"{name} portfolio", line=dict(color=dash[name][1], dash=dash[name][0], width=2.5), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>" + name + "</extra>"))
     spy = (1 + test[config.MARKET].fillna(0)).cumprod()
     fig3.add_trace(go.Scatter(x=spy.index, y=spy, name="SPY", line=dict(color=SLATE, dash="dot", width=2.5), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>SPY</extra>"))
-    layout(fig3, f"Growth of 1 since {pf['test_start']} (test period; daily constant weights, no transaction costs)", yfmt=".2f", ytitle="growth of 1")
+    layout(fig3, f"Growth of 1 since {pf['test_start']} (test period)", yfmt=".2f", ytitle="growth of 1")
 
     fig4 = go.Figure()
     lo_v, hi_v = metrics["annual_vol"].quantile([0.01, 0.99])
@@ -125,7 +148,7 @@ def build() -> str:
         fig4.add_trace(
             go.Scatter(
                 x=g["annual_vol"], y=g["mean_annual_return"], mode="markers", name=label, text=g["ticker"],
-                marker=dict(symbol=symbol, size=9 if flag else 7, color=g["sharpe"], colorscale=[[0, "#B45309"], [0.5, "#E2E8F0"], [1, "#1E40AF"]], cmin=-1.0, cmax=2.0, cmid=0.5, line=dict(width=0.6, color="#475569"), opacity=0.85, showscale=not flag, colorbar=dict(title="Sharpe", thickness=12, len=0.8)),
+                marker=dict(symbol=symbol, size=11 if flag else 8, color=g["sharpe"], colorscale=[[0, RED], [0.5, "#94A3B8"], [1, GREEN]], cmin=-1.0, cmax=2.0, cmid=0.5, line=dict(width=0.6, color="#475569"), opacity=0.85, showscale=not flag, colorbar=dict(title="Sharpe", thickness=12, len=0.8)),
                 customdata=np.stack([g["sharpe"], g["max_drawdown"]], axis=1),
                 hovertemplate="<b>%{text}</b><br>return %{y:.1%}, volatility %{x:.1%}<br>Sharpe %{customdata[0]:.2f}, max drawdown %{customdata[1]:.1%}<extra>" + label + "</extra>",
             )
@@ -137,11 +160,11 @@ def build() -> str:
     outside = int(((metrics["annual_vol"] < max(0.0, lo_v - px_)) | (metrics["annual_vol"] > hi_v + px_) | (metrics["mean_annual_return"] < lo_r - py_) | (metrics["mean_annual_return"] > hi_r + py_)).sum())
 
     fig5 = go.Figure()
-    for m, dash_, color in (("ensemble", "dot", "#0F172A"),):
+    for m, dash_, color in (("ensemble", "dot", INK),):
         fig5.add_trace(go.Scatter(x=ic.index, y=ic[m], name=m, line=dict(color=color, dash=dash_, width=1.6), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>" + m + "</extra>"))
     indep = ml.nonoverlapping(ic["ensemble"], prices.index)
     fig5.add_trace(go.Scatter(x=indep.index, y=indep, mode="markers", name="ensemble, independent periods", marker=dict(color=RED, size=9, symbol="diamond"), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>independent period</extra>"))
-    fig5.add_hline(y=0, line=dict(color="#000000", width=1))
+    fig5.add_hline(y=0, line=dict(color=INK, width=1))
     layout(fig5, "Rank IC by date: forecast against realised 63-day return across stocks", yfmt=".2f", ytitle="rank IC")
 
     # ---- text and tables
@@ -203,29 +226,36 @@ def build() -> str:
     ]
 
     css = """
-:root{--ink:#0F172A;--muted:#475569;--line:#DBEAFE;--bg:#F8FAFC;--card:#FFFFFF;--primary:#1E40AF;--accent:#D97706}
+:root{--ink:#E5E7EB;--muted:#94A3B8;--line:#22304D;--bg:#0B1220;--card:#0F1A2E;--primary:#38BDF8;--up:#22C55E;--down:#F43F5E}
 *{box-sizing:border-box}
 html{overflow-x:hidden}
-body{margin:0;overflow-x:hidden;background:var(--bg);color:#1E293B;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.55}
-a{color:var(--primary)}a:focus-visible,button:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+body{margin:0;overflow-x:hidden;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.55;
+background:radial-gradient(1100px 420px at 10% -8%,rgba(56,189,248,.11),transparent 60%),radial-gradient(900px 380px at 100% 0%,rgba(34,197,94,.08),transparent 55%),linear-gradient(rgba(148,163,184,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.035) 1px,transparent 1px),#0B1220;background-size:auto,auto,44px 44px,44px 44px,auto}
+a{color:var(--primary)}a:focus-visible,button:focus-visible,.tape:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
 header,main,footer{max-width:1200px;margin:0 auto;padding:0 16px}
-header{padding-top:28px}
-h1{margin:0 0 6px;font-size:2rem;letter-spacing:-.02em;color:var(--ink);border-left:6px solid var(--primary);padding-left:12px;line-height:1.15}
+header{padding-top:24px}
+h1{margin:0 0 6px;font-size:2rem;letter-spacing:-.02em;color:var(--ink);border-left:6px solid var(--up);padding-left:12px;line-height:1.15}
 h2{margin:36px 0 10px;font-size:1.3rem;color:var(--ink)}
 .lead,.muted{color:var(--muted)}
-.notice{background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:12px 14px;margin:16px 0}
+.tape{display:flex;overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:0 0 18px;background:linear-gradient(180deg,#111E37,#0C1628);font-variant-numeric:tabular-nums;scrollbar-width:thin}
+.tape>div{white-space:nowrap;padding:9px 15px;border-right:1px solid var(--line);font-size:.9rem;flex:0 0 auto}
+.tape>div:last-child{border-right:none}
+.tape .lbl{color:var(--muted);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center}
+.tape .sym{font-weight:700;margin-right:8px}.tape .px{margin-right:7px}
+.tape .up{color:var(--up);font-weight:600}.tape .dn{color:var(--down);font-weight:600}.tape .flat{color:var(--muted);font-weight:600}
+.notice{background:#16233D;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:10px;padding:12px 14px;margin:16px 0}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}
-.card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--primary);border-radius:10px;padding:12px 14px;box-shadow:0 1px 2px rgba(15,23,42,.06)}
+.card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--primary);border-radius:10px;padding:12px 14px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .label{color:var(--muted);font-size:.85rem;font-weight:600}.value{color:var(--ink);font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums}.sub{color:var(--muted);font-size:.8rem;min-height:1.1em}
-.panel{overflow:hidden;background:var(--card);border:1px solid #E2E8F0;border-radius:10px;padding:6px;margin:14px 0;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.panel{overflow:hidden;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;margin:14px 0;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr));gap:14px}
 .scroll{overflow-x:auto;margin:10px 0}
-table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid #E2E8F0;font-variant-numeric:tabular-nums}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);font-variant-numeric:tabular-nums}
 caption{text-align:left;color:var(--muted);font-size:.85rem;padding:6px 2px}
-th,td{padding:8px 10px;border-bottom:1px solid #E2E8F0;text-align:left;white-space:nowrap}
-th{background:#E9EEF6;color:var(--ink);font-size:.85rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:#142038;color:var(--ink);font-size:.85rem}
 ul{padding-left:20px}li{margin:6px 0}
-code,pre{background:#E9EEF6;border-radius:6px;font-size:.9rem}code{padding:1px 5px}pre{padding:10px 12px;overflow-x:auto}
+code,pre{background:#142038;color:#E5E7EB;border-radius:6px;font-size:.9rem}code{padding:1px 5px}pre{padding:10px 12px;overflow-x:auto}
 footer{padding:28px 16px 40px;color:var(--muted);font-size:.9rem}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 """
@@ -242,6 +272,7 @@ footer{padding:28px 16px 40px;color:var(--muted);font-size:.9rem}
 </head>
 <body>
 <header>
+{price_tape(prices)}
 <h1>Risk dashboard report</h1>
 <p class="lead">Real daily prices from Yahoo Finance, {d['first_date']} to {d['last_date']}, downloaded {meta['downloaded_utc']}. {d['tickers_returned']} of {d['tickers_requested']} requested tickers returned data. Educational research tool, not investment advice.</p>
 <div class="notice"><strong>This page is a fixed report.</strong> It shows the numbers and main charts as they were when the page was built. <a href="app/"><strong>Open the interactive dashboard</strong></a> to choose any ticker, window and confidence level: it is the real Streamlit dashboard, running in your browser (the first load takes about a minute). You can also run it on your own computer: see the end of this page.</div>
@@ -318,12 +349,12 @@ def build_app() -> dict[str, bytes]:
 <meta name="description" content="The interactive risk dashboard running in the browser. No server: Python runs in WebAssembly.">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@{STLITE}/build/stlite.css">
 <style>
-body{{margin:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#1E293B}}
-#bar{{background:#0F172A;color:#E2E8F0;padding:8px 16px;font-size:.9rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center}}
-#bar a{{color:#93C5FD}} #bar a:focus-visible{{outline:3px solid #93C5FD;outline-offset:2px}}
+body{{margin:0;background:#0B1220;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#E5E7EB}}
+#bar{{background:#0F1A2E;border-bottom:1px solid #22304D;color:#E5E7EB;padding:8px 16px;font-size:.9rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center}}
+#bar a{{color:#38BDF8}} #bar a:focus-visible{{outline:3px solid #38BDF8;outline-offset:2px}}
 #loading{{max-width:640px;margin:48px auto;padding:0 16px;line-height:1.55}}
-#loading h1{{font-size:1.4rem;border-left:6px solid #1E40AF;padding-left:10px;color:#0F172A}}
-.muted{{color:#475569}}
+#loading h1{{font-size:1.4rem;border-left:6px solid #22C55E;padding-left:10px;color:#E5E7EB}}
+.muted{{color:#94A3B8}}
 </style>
 </head>
 <body>

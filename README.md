@@ -138,6 +138,8 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 
 **On your computer.** `streamlit run dashboard/app.py` after the pipeline has run. It reads the downloaded data and the files in `results/`.
 
+**Look.** A dark navy theme like a charting screen, with green for gains and red for losses: a strip along the top shows the last close and one-day change of 14 large tickers (arrows and signs as well as colour), metric cards and charts sit on dark panels, and every text and chart colour keeps a contrast ratio of at least 4.5:1 (a test checks it). The static report and the loading page use the same palette.
+
 **Tabs**
 
 | Tab | What you can do |

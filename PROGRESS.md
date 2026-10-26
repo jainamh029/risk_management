@@ -128,3 +128,7 @@ Added `scripts/update_data.py` and `data.update_snapshot` (D49): the snapshot is
 
 `.github/workflows/daily-update.yml` (D51): at 23:00 UTC on weekdays it restores the price snapshot from the `pages` branch, runs `scripts/update_data.py`, and when new days arrived regenerates the results and README tables, runs the verifier and the whole test suite, commits to `main`, and publishes the web pages on the `pages` branch. Holidays and weekends add no rows and change nothing; a missed run is caught up by the next. Real-data check of the incremental method (2026-10-26): a copy of the snapshot cut back to 2026-10-16 and updated to 2026-10-23 equals the full download for 461 of 462 tickers (every price identical); the exception, PARA, was reassigned by Yahoo to another company, which led to the 90% coverage rule (D52). Tests that hard-coded numbers of the current snapshot now follow the data. Pages source moved to the `pages` branch; `docs/` left main.
 
+## 19. Trading-terminal theme
+
+Dark navy theme for the dashboard, the web report and the loading page (D54): faint chart-grid background, a strip of last closes and one-day changes of 14 large tickers, green for gains and red for losses, dark chart panels through one `themed()` function. Contrast of every text and chart colour is tested (at least 4.5:1). Checked by eye in the browser pane on the overview, stock explorer and VaR explorer tabs and on a phone-width view; two details were fixed that way (map markers too dark near a Sharpe ratio of zero; a tape label that hid the tickers on a phone).
+
