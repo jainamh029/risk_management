@@ -64,14 +64,21 @@ def rolling_forecasts(returns: np.ndarray, window: int, conf: float, method: str
 
     The confidence level and the method are validated before anything is calculated, with the same rules as the
     public VaR functions (a real scalar strictly between 0 and 1; booleans, strings, non-scalars, NaN and infinities
-    raise ValueError). The history itself is NOT required to be finite: a window that contains a missing return
-    simply has no forecast, and the other windows of the same history are still forecast.
+    raise ValueError). The history may contain missing returns (NaN): a window that contains one has no forecast, and the
+    other windows of the same history are still forecast. It must not contain an infinite value (positive or negative):
+    that raises ValueError, wherever it is, because infinity is not treated as missing and is never replaced.
     """
     c = validate_confidence(conf)
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}; choose from {METHODS}")
     window = validate_window(window)
     r = np.asarray(returns, dtype=float)
+    infinite = np.flatnonzero(np.isinf(r))
+    if infinite.size:  # infinity is neither a missing return nor a valid one; it is never converted to NaN
+        raise ValueError(
+            f"returns contain {infinite.size} infinite value(s) (first at position {int(infinite[0])}); a rolling VaR forecast cannot use them. "
+            "Use NaN for a missing return (the windows containing it then have no forecast); an infinite return is a data error."
+        )
     out = np.full(r.shape[0], np.nan)
     if r.shape[0] <= window:
         return out

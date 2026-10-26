@@ -7,6 +7,10 @@ costs are not modelled.
 
 A preset whose screen leaves fewer than MIN_ASSETS stocks is reported as not
 constructed. Screens are never relaxed.
+
+The Sharpe ratio is undefined when a portfolio's volatility is zero. In a reported performance figure it is NaN.
+In the optimiser's objective it raises ZeroVolatilityError, which `fit` records as "not constructed" with the reason:
+no objective value is invented, so a degenerate portfolio can never come back as a successful allocation.
 """
 from __future__ import annotations
 
@@ -15,8 +19,12 @@ import pandas as pd
 from scipy.optimize import minimize
 
 from . import config
-from .metrics import TRADING_DAYS, compute_metrics
+from .metrics import MIN_VOLATILITY, TRADING_DAYS, compute_metrics, sharpe_ratio
 from .var import historical_var_es
+
+
+class ZeroVolatilityError(ValueError):
+    """The Sharpe ratio is undefined because a portfolio's volatility is zero, so the objective cannot be evaluated."""
 
 
 def screen(train_metrics: pd.DataFrame, train_var99: pd.Series, preset: dict) -> pd.DataFrame:
@@ -41,8 +49,15 @@ def max_sharpe_weights(train_returns: pd.DataFrame, rf_annual: float, bounds: tu
     cov = train_returns.cov().values * TRADING_DAYS
 
     def neg_sharpe(w):
-        vol = float(np.sqrt(w @ cov @ w))
-        return -(w @ mu - rf_annual) / vol if vol > 0 else 0.0
+        variance = float(w @ cov @ w)
+        if not np.isfinite(variance):
+            raise ZeroVolatilityError("the Sharpe ratio cannot be evaluated: the portfolio variance is not a finite number")
+        if variance <= MIN_VOLATILITY**2:  # zero volatility, whatever the sign of the excess return
+            raise ZeroVolatilityError(
+                "the Sharpe ratio is undefined at zero volatility: the optimiser reached a portfolio whose volatility is zero "
+                "(constant returns, or holdings whose returns cancel exactly). No allocation is returned."
+            )
+        return -(w @ mu - rf_annual) / np.sqrt(variance)
 
     res = minimize(
         neg_sharpe,
@@ -82,7 +97,7 @@ def performance(daily: pd.Series, rf_annual: float) -> dict:
         "end": str(d.index[-1].date()),
         "mean_annual_return": ann_ret,
         "annual_vol": vol,
-        "sharpe": (ann_ret - rf_annual) / vol if vol > 0 else float("nan"),
+        "sharpe": sharpe_ratio(ann_ret, rf_annual, vol),
         "total_return": float(cum.iloc[-1] - 1.0),
         "max_drawdown": float((wealth / np.maximum.accumulate(wealth) - 1.0).min()),
     }

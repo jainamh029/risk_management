@@ -367,3 +367,7 @@ Remaining and not repaired:
 
 `ALL_MODULES_VALIDATION.md` and `MODULE_TEST_MATRIX.md` record a module-by-module audit made after this report. Where they differ from sections 25 and earlier, they supersede them: the backtest `window` argument and the other arguments listed in section 25 as unvalidated are now validated (D43), and the final suite is 679 tests. The infinite-value policy in section 25 is unchanged and remains an open owner decision.
 
+## 27. Infinite values and zero volatility (later change)
+
+Section 25 listed an infinite return inside a rolling history as an open item; it is closed. `backtest.rolling_forecasts` now raises `ValueError` for infinity, and the NaN policy is unchanged. The zero-volatility Sharpe ratio is also now undefined (NaN) and the optimiser refuses such portfolios. See `DECISIONS.md` D42 and D48 and `ALL_MODULES_VALIDATION.md` section 12; the final suite is 719 tests.
+

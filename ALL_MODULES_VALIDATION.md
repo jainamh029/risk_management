@@ -230,12 +230,78 @@ any method works.
   re-derived. The sklearn tree algorithm is trusted.
 - Streamlit and Plotly render what the app specifies; the specification was checked, the pixels were not (apart from one smoke).
 - Results were produced on one machine (arm64 macOS); other platforms may differ in the last digits of floating-point values.
-- The infinite-return policy inside a rolling history (`DECISIONS.md` D42) is an open owner decision.
-- The portfolio objective returns 0 when a portfolio's volatility is exactly 0 (`neg_sharpe` in `portfolio.py`); this
-  needs constant returns and was not reached with any data or fixture here, and no test covers it.
+- (Closed after this audit, see section 12: the rolling-history infinite-value policy and the zero-volatility objective.)
 
 ## 11. Residual items for the owner
 
 1. The stray user-level Jupyter kernel directory created in an earlier phase (`PROGRESS.md` section 7) still needs removal by the owner.
 2. Three earlier local commits (`970faf1`, `4ccb8bb`, `154a5a0`) plus this audit's commit are unpushed; nothing was pushed, no remote was changed and no PR was opened.
-3. Decide whether to change the rolling-history infinite-value policy (D42).
+3. (Closed: the infinite-value policy, section 12.)
+
+## 12. Follow-up: the two numerical edge cases left open by the audit
+
+Baseline `8512e601070533e96638b108322ef2dec20bd0d5` (679 tests). Scope: only these two items. No model setting, evaluation
+date, universe, portfolio screen, statistical threshold or reported number was changed.
+
+### 12.1 Infinity in a rolling history (D42)
+
+| | |
+|---|---|
+| Before | An infinite return inside a history was not treated as missing: the historical method returned an ordinary-looking number for windows containing it and the normal method returned NaN (observed on a constructed 30-day series, `VALIDATION_REPORT.md` section 25). |
+| Policy now | `backtest.rolling_forecasts` raises `ValueError` for positive or negative infinity anywhere in the history, with the count, the first position and the instruction to use NaN for a missing return. The check runs after the confidence, method and window validation and before any calculation, including for histories too short to forecast. Infinity is never replaced by NaN, and the input is not modified. |
+| NaN policy | Unchanged: the windows containing a missing return have no forecast, the others are forecast (`test_the_nan_policy_is_unchanged_affected_windows_have_no_forecast_and_the_rest_match_the_reference` compares every day with an independent calculation for both methods). |
+| Inheritance | `backtest_series` and `backtest_universe` call `rolling_forecasts`, so they reject it too (`test_the_higher_level_backtest_functions_reject_infinity_too`). `var.var_es` already rejected infinity. |
+| Valid data | Prices must be finite and strictly positive (`data.validate_prices`), so valid returns are finite and never reach the check. |
+
+### 12.2 Zero volatility in the portfolio objective (D48)
+
+Inspection of `portfolio.max_sharpe_weights` before choosing a repair, reproduced on the unmodified code:
+
+| Case | Behaviour before |
+|---|---|
+| Four assets with the exactly representable constant return 1/16, risk-free rate giving a positive, zero or negative excess return | all three returned the equal weights `[0.25, 0.25, 0.25, 0.25]` as a successful allocation: the objective returned 0.0 at zero volatility, so the optimiser stopped at its starting point |
+| Constant return 0.001 (volatility about 1e-19 after rounding) | equal weights for a positive excess return, "did not converge" errors for the zero and negative ones; `performance` reported a Sharpe ratio of about 1.45e18 |
+| Two holdings whose returns cancel exactly | the 50/50 portfolio (volatility exactly 0) was returned as a successful allocation |
+
+Repair (the design already refuses rather than relaxes: non-convergence and infeasible bounds make a preset "not constructed" with a reason):
+
+- `metrics.sharpe_ratio` (shared by the metrics table and `portfolio.performance`) returns NaN when the annualised volatility is not finite or is at or below `MIN_VOLATILITY = 1e-12`, whatever the sign of the excess return.
+- The optimiser's objective raises `ZeroVolatilityError` (a `ValueError`) instead of returning 0.0 when the portfolio variance is not finite or is at or below `MIN_VOLATILITY**2`. `fit` already records `ValueError` and `RuntimeError` from the optimiser as `not_constructed` with the reason, so a degenerate portfolio can never be a constructed one.
+- `MIN_VOLATILITY` is a numerical floor for rounding noise (real annualised volatilities are about 1e-1), not a statistical threshold. It is documented in `FORMULAS.md` and `DECISIONS.md` D48.
+
+I judged this not to be a methodological change: it only changes behaviour on degenerate inputs, replaces an invented value with an explicit refusal in the way the module already handles other failures, and leaves every portfolio with positive volatility on exactly the same code path and values (the regenerated results are byte-identical, below). If you would rather have a different policy for those degenerate inputs (for example excluding such holdings instead of refusing the preset), that is a methodology choice and I have not made it.
+
+Not changed: the Sortino ratio (`dd_dev > 0`) and the Calmar ratio have the same kind of comparison with zero; the task named only the Sharpe ratio.
+
+### 12.3 Regression tests (40 new, `tests/unit/test_numerical_edge_cases.py`)
+
+Infinity: `test_an_infinite_return_anywhere_in_the_history_is_rejected_with_an_explanation` (both methods, both signs, four positions), `test_infinity_is_rejected_even_when_the_history_is_too_short_to_forecast_and_when_it_also_contains_nan`, `test_the_number_of_infinite_values_is_reported`, `test_the_nan_policy_is_unchanged_affected_windows_have_no_forecast_and_the_rest_match_the_reference`, `test_the_higher_level_backtest_functions_reject_infinity_too`.
+Zero volatility: `test_zero_volatility_with_exactly_representable_returns_is_undefined_for_every_sign_of_the_excess_return` (the fixture's zero variance and the sign of the excess return are checked independently), `test_zero_volatility_that_is_only_zero_up_to_rounding_is_also_undefined`, `test_holdings_whose_returns_cancel_exactly_are_refused_not_returned_as_a_successful_allocation`, `test_a_zero_volatility_portfolio_is_a_not_constructed_preset_with_the_reason_never_a_constructed_one`, `test_a_reported_sharpe_ratio_at_zero_volatility_is_nan_for_every_sign_of_the_excess_return`, `test_sharpe_ratio_helper_values_and_boundaries`, `test_metrics_table_reports_an_undefined_sharpe_for_a_constant_return_series`, `test_valid_inputs_give_the_same_weights_as_the_independent_two_asset_reference`.
+Mutation check: with the `backtest.py` repair removed 22 of the 40 fail; with the `portfolio.py` and `metrics.py` repairs removed 15 fail; with both in place all 40 pass.
+
+### 12.4 Verification
+
+| Command | Result |
+|---|---|
+| Focused: `pytest tests/unit tests/statistical` and `tests/integration/test_portfolio.py test_metrics.py test_backtest.py test_readme_claims.py test_reconciliation.py` | 540 passed; 54 passed |
+| Full suite, working environment (`.venv/bin/python -m pytest -q -p no:cacheprovider`) | exit 0, **719 passed**, 0 failed, 0 skipped, 296 s |
+| Full suite, fresh virtual environment, on a copy of the tree | exit 0, **719 passed**, 287 s |
+| `scripts/run_pipeline.py` from the frozen snapshot, in the copy (fresh environment) | exit 0; every result file byte-identical to the copies taken before the change |
+| `scripts/verify_backtest_independent.py` (both environments) | exit 0, "compared 1832 ... ALL MATCH" |
+| `scripts/make_readme_tables.py --check` (both environments) | exit 0 |
+| `python -m compileall -q riskengine scripts dashboard tests` | exit 0 |
+
+### 12.5 Artifact differences and valid-data results
+
+| Artifact | Result |
+|---|---|
+| The 12 files in `results/` | byte-identical to the pre-change copies (`diff -rq` after the working-tree run and after the regeneration in the fresh environment) |
+| Snapshot and cached sources | SHA-256 unchanged |
+| `notebooks/walkthrough.ipynb` | byte-identical |
+| Generated results block of `README.md` | unchanged (`--check` passes); two sentences were added elsewhere in the README (the backtest paragraph and the descriptive-statistics paragraph) |
+| Documents | `DECISIONS.md` (D42 rewritten, D48 added, open item removed), `CLAIMS.md` (one row replaced, one added), `FORMULAS.md` (three rows), `MODULE_TEST_MATRIX.md`, this file, `PROGRESS.md`, `VALIDATION_REPORT.md` |
+
+Valid-data results are therefore unchanged: neither the real-data backtest nor any real portfolio evaluation reached an
+infinite return or a zero-volatility portfolio. Remaining unverified items are those of section 10 (external data, browser
+rendering, the network paths).
+

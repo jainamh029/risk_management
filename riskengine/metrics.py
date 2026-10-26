@@ -12,6 +12,22 @@ import pandas as pd
 
 TRADING_DAYS = 252
 
+# Annualised volatility at or below this value is treated as zero. Returns that are constant up to floating-point
+# rounding have a computed volatility of about 1e-18, which would otherwise give a Sharpe ratio of about 1e18. Real
+# daily return series have an annualised volatility of the order of 1e-1, so this floor never applies to them.
+MIN_VOLATILITY = 1e-12
+
+
+def sharpe_ratio(annual_return: float, rf_annual: float, annual_vol: float) -> float:
+    """(annual return - risk-free rate) / annualised volatility; NaN (undefined) when the volatility is zero.
+
+    The sign of the excess return does not matter: with zero volatility the ratio has no value (it is neither
+    plus nor minus infinity nor zero), so it is undefined whether the excess return is positive, zero or negative.
+    """
+    if not np.isfinite(annual_vol) or annual_vol <= MIN_VOLATILITY:
+        return float("nan")
+    return float((annual_return - rf_annual) / annual_vol)
+
 
 def max_drawdown(prices: pd.Series) -> float:
     p = prices.dropna()
@@ -80,7 +96,7 @@ def compute_metrics(
                 "cagr": cagr,
                 "annual_vol": vol,
                 "downside_dev": dd_dev,
-                "sharpe": (mean_ann - rf_annual) / vol if vol > 0 else np.nan,
+                "sharpe": sharpe_ratio(mean_ann, rf_annual, vol),
                 "sortino": (mean_ann - rf_annual) / dd_dev if dd_dev > 0 else np.nan,
                 "calmar": cagr / abs(mdd) if mdd < 0 else np.nan,
                 "max_drawdown": mdd,
