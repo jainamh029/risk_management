@@ -164,7 +164,7 @@ def test_custom_screen_with_the_aggressive_settings_reproduces_the_stored_portfo
     stored = json.loads((ROOT / "results" / "portfolios.json").read_text())["presets"]["aggressive"]
     custom = app.session_state["pf_custom"]
     assert custom["status"] == "constructed" and custom["tickers"] == stored["tickers"]
-    assert custom["out_of_sample_test"]["total_return"] == pytest.approx(stored["out_of_sample_test"]["total_return"], rel=1e-9)
+    assert custom["out_of_sample_test"]["total_return"] == pytest.approx(stored["out_of_sample_test"]["total_return"], rel=1e-6)  # the daily workflow regenerates results on Linux; optimiser weights agree across systems to about 1e-7
     app.slider(key="pf_sharpe").set_value(2.0)
     app.button(key="pf_build").click()
     app.run()

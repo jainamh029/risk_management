@@ -243,7 +243,7 @@ def test_stored_portfolio_results_match_a_fresh_run(result):
         assert s["status"] == e["status"]
         if e["status"] == "constructed":
             assert s["tickers"] == e["tickers"]
-            assert s["out_of_sample_test"]["total_return"] == pytest.approx(e["out_of_sample_test"]["total_return"], rel=1e-9)
+            assert s["out_of_sample_test"]["total_return"] == pytest.approx(e["out_of_sample_test"]["total_return"], rel=1e-6)  # optimiser weights agree across operating systems to about 1e-7
 
 
 def _training_sharpes(fitted, rf_train):
