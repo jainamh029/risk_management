@@ -2,6 +2,34 @@
 
 Value at Risk (VaR) and Expected Shortfall (ES) estimation, out-of-sample VaR backtesting, descriptive risk statistics, a train/test portfolio experiment, and an out-of-sample test of a machine-learning forecast of the 63-day return, with an interactive dashboard. Every result comes from real daily prices downloaded from Yahoo Finance for a hand-maintained list of 483 tickers. No data is simulated, generated or filled in. The test suite also uses small hand-constructed fixtures (`tests/unit`) and simulated series (`tests/statistical`); these exist only inside tests and are never written to `data/` or `results/`.
 
+**Try it without installing anything**
+
+| | |
+|---|---|
+| Interactive dashboard | https://jainamh029.github.io/risk_management/app/ (runs in your browser; the first load takes about a minute) |
+| Static report | https://jainamh029.github.io/risk_management/ (the main charts and tables, loads at once) |
+
+**What is in it**
+
+| Part | What it does |
+|---|---|
+| `riskengine/` | The tested package: data handling, VaR and ES, the backtest and Kupiec test, descriptive statistics, the train/test portfolio experiment, and the forecasting model |
+| `scripts/` | Download and update the data, run the whole pipeline, write the tables in this README, verify the backtest independently, and build the web pages |
+| `dashboard/app.py` | The interactive dashboard: overview, stock explorer, VaR explorer, backtest comparison, portfolio experiment, forecasting model, glossary |
+| `tests/` | Unit, integration and statistical tests; the results below are checked against independent calculations |
+
+**Quick start on your own computer**
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/fetch_data.py       # downloads the real prices once (a few minutes)
+python scripts/run_pipeline.py     # writes results/
+streamlit run dashboard/app.py     # opens the dashboard
+```
+
+Later, `python scripts/update_data.py --rebuild` adds only the new days and regenerates everything (see "Keeping the data up to date").
+
 ## Results
 
 <!-- RESULTS:START -->
@@ -106,9 +134,35 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 
 ## Dashboard
 
-The full interactive dashboard runs on GitHub Pages at https://jainamh029.github.io/risk_management/app/ : it is the same `dashboard/app.py`, running inside your browser (stlite: Streamlit on Pyodide, WebAssembly), so there is no server. The first load takes about a minute and downloads a few tens of megabytes of Python packages from the jsDelivr CDN (plotly from PyPI); it then reads a copy of the code, `results/` and the price snapshot published in `docs/app/files/`. A static report with the main charts is at https://jainamh029.github.io/risk_management/ . `scripts/build_site.py` writes both into `docs/`, and a test fails if they are out of date with the code and the results. The published copy of the price data is `docs/app/files/data/prices.parquet`: it is Yahoo Finance data kept for this educational project, and Yahoo's terms limit redistribution, so delete that file (and the live app with it) if you do not want it public.
+**Online.** The interactive dashboard runs on GitHub Pages at https://jainamh029.github.io/risk_management/app/ . GitHub Pages cannot run a Python server, so the page runs the same `dashboard/app.py` inside your browser (stlite: Streamlit on Pyodide, WebAssembly) and nothing is sent to a server. The first load takes about a minute and downloads a few tens of megabytes of Python packages from the jsDelivr CDN (plotly from PyPI); the page then reads a copy of the code, `results/` and the price snapshot published in `docs/app/files/`. A static report with the main charts is at https://jainamh029.github.io/risk_management/ . `scripts/build_site.py` writes both into `docs/`, and a test fails if they are out of date with the code and the results. The published copy of the price data is `docs/app/files/data/prices.parquet`: it is Yahoo Finance data kept for this educational project, and Yahoo's terms limit redistribution, so delete that file (and the live app with it) if you do not want it public.
 
-`dashboard/app.py` reads the downloaded data and the files in `results/`. Tabs: overview (headline numbers, growth of 1 for the portfolios against SPY over the test period, and the breach rate of every ticker against the expected rate), a stock explorer (a risk and return map of every ticker, and for one ticker its growth, drawdown, 60-day volatility and return distribution against a normal curve, over all data, three years or one year), a VaR explorer (choose ticker, confidence, window and method; the forecast, breaches and Kupiec test are recomputed live), the backtest comparison with filters and a sortable table, the portfolio experiment (with optional screen sliders and a correlation matrix chart of the holdings in the training period), the forecasting evaluation with a filterable table of the latest forecasts, and a glossary. Charts support hover and zoom, series are distinguished by line style and marker as well as colour, and every chart has a data table. Changing portfolio thresholds and then reading the test-period numbers is tuning on the test data, and the dashboard says so next to the controls.
+**On your computer.** `streamlit run dashboard/app.py` after the pipeline has run. It reads the downloaded data and the files in `results/`.
+
+**Tabs**
+
+| Tab | What you can do |
+|---|---|
+| Overview | Headline numbers; growth of 1 for the portfolios against SPY over the test period; the breach rate of every ticker against the expected rate |
+| Stock explorer | A risk and return map of every ticker (filter stocks or ETFs, highlight one); for one ticker, its growth, drawdown, 60-day volatility and return distribution against a normal curve, over all data, three years or one year |
+| VaR explorer | Choose ticker, confidence, window and method; the forecast, breaches and Kupiec test are recomputed live |
+| Backtest comparison | Filters and a sortable table of every ticker's result |
+| Portfolio experiment | The stored presets, optional screen sliders, and a correlation matrix chart of the holdings in the training period |
+| Forecasting model | The out-of-sample evaluation, rank IC over time, and a filterable, downloadable table of the latest forecasts |
+| Glossary and limits | Plain-language definitions and the limits of the analysis |
+
+Charts support hover and zoom, series are distinguished by line style and marker as well as colour, and every chart has a data table. A value that cannot be computed is shown as "undefined". Changing portfolio thresholds and then reading the test-period numbers is tuning on the test data, and the dashboard says so next to the controls.
+
+## Keeping the data up to date
+
+`scripts/fetch_data.py` downloads the whole history and is for the first run. After that, use `scripts/update_data.py`, which does not download the history again:
+
+1. It finds the last stored date and downloads only the days after it, plus a one-week overlap.
+2. It compares the overlap with the stored prices. Yahoo adjusts old prices after a dividend or split, so a ticker whose overlap no longer matches is downloaded in full again and replaced (nothing is rescaled or patched); the others only get the new days.
+3. Tickers new to the list, or that failed last time, are downloaded in full. The Treasury bill series is handled the same way.
+4. If nothing is new, no file is touched. Files are written atomically, and invalid data (unsorted dates, non-positive prices) is refused before anything is written, so a failed update leaves the old snapshot as it was.
+5. The default end date is today, so an unfinished trading day is never stored. `--end` sets another exclusive end date, `--full` downloads everything again, and `--rebuild` then reruns the pipeline, the membership check, the README tables and the web pages.
+
+Tests check this against a stand-in for Yahoo Finance: the updated snapshot equals a complete download, a restated ticker is replaced, and failures leave the snapshot untouched. The real Yahoo update has not been run for the figures in this README, which come from the snapshot downloaded on 2026-10-25.
 
 ## Method
 
@@ -150,9 +204,12 @@ python scripts/build_site.py
 pytest -q
 ```
 
-`pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments. Statement and branch coverage of the package, the scripts and the dashboard is measured with `pytest --cov=riskengine --cov=dashboard --cov=scripts --cov-branch --cov-report=term-missing`; the scripts that the tests run as subprocesses are included only when `COVERAGE_PROCESS_START` points to `.coveragerc` (the procedure and the measured figures are in `ALL_MODULES_VALIDATION.md`).
-
-`scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/update_data.py` adds only the days after the last stored date (plus a one-week overlap that is compared with the stored prices; a ticker whose stored prices no longer match Yahoo's, for example after a dividend or split, is downloaded in full again and replaced; if nothing is new no file is touched; the default end date is today, so an unfinished trading day is never stored). `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`; it can be executed without modifying it with `jupyter nbconvert --to notebook --execute --output-dir /tmp/notebook_check notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
+- **Tests.** `pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments. If the snapshot is missing, tests that need it are reported as BLOCKED and the run exits with status 10; nothing is downloaded.
+- **Coverage.** `pytest --cov=riskengine --cov=dashboard --cov=scripts --cov-branch --cov-report=term-missing`; the scripts that the tests run as subprocesses are included only when `COVERAGE_PROCESS_START` points to `.coveragerc` (the procedure and the measured figures are in `ALL_MODULES_VALIDATION.md`).
+- **Independent check.** `scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs.
+- **Membership tables.** `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables.
+- **Data files.** `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; use `scripts/update_data.py` instead, then run the pipeline and the README script again.
+- **Notebook.** The walkthrough notebook is `notebooks/walkthrough.ipynb`; it can be executed without modifying it with `jupyter nbconvert --to notebook --execute --output-dir /tmp/notebook_check notebooks/walkthrough.ipynb`.
 
 ## Layout
 
