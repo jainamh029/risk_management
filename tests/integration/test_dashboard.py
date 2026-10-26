@@ -35,7 +35,7 @@ def rendered_text(at):
 
 
 def test_loads_without_errors_and_has_every_tab(app):
-    assert [t.label for t in app.tabs] == ["Overview", "VaR explorer", "Backtest comparison", "Portfolio experiment", "Forecasting model", "Glossary and limits"]
+    assert [t.label for t in app.tabs] == ["Overview", "Stock explorer", "VaR explorer", "Backtest comparison", "Portfolio experiment", "Forecasting model", "Glossary and limits"]
     assert not app.error
     assert len(app.get("plotly_chart")) >= 5
 

@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from riskengine import backtest, config, data, ml, portfolio, var  # noqa: E402
+from riskengine.metrics import TRADING_DAYS  # noqa: E402
 
 BLUE, LIGHT_BLUE, AMBER, RED, SLATE = "#1E40AF", "#3B82F6", "#D97706", "#DC2626", "#64748B"
 st.set_page_config(page_title="Risk dashboard", layout="wide")
@@ -27,8 +28,33 @@ st.set_page_config(page_title="Risk dashboard", layout="wide")
 st.markdown(
     """
 <style>
-  .block-container {padding-top: 2.2rem; max-width: 1400px;}
-  [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
+  /* Layout. The font is left to Streamlit's bundled default, which also keeps its icon font working */
+  .block-container {padding-top: 2rem; padding-bottom: 3rem; max-width: 1400px;}
+  h1 {font-weight: 750; letter-spacing: -0.02em; color: #0F172A; border-left: 6px solid #1E40AF; padding-left: 0.75rem; line-height: 1.15;}
+  h2, h3 {color: #0F172A; letter-spacing: -0.01em;}
+  [data-testid="stCaptionContainer"] {color: #475569;}
+
+  /* Metric cards */
+  [data-testid="stMetric"] {background: #FFFFFF; border: 1px solid #DBEAFE; border-top: 3px solid #1E40AF; border-radius: 10px; padding: 0.85rem 1rem 0.8rem 1rem; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);}
+  [data-testid="stMetricLabel"] {color: #475569; font-size: 0.82rem; font-weight: 600; text-transform: none;}
+  [data-testid="stMetricValue"] {color: #0F172A; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.7rem;}
+  [data-testid="stMetricValue"] > div {white-space: normal; overflow: visible; text-overflow: clip;}
+  [data-testid="stMetricDelta"] {font-size: 0.8rem;}
+
+  /* Tabs */
+  .stTabs [data-baseweb="tab-list"] {gap: 0.25rem; border-bottom: 1px solid #DBEAFE;}
+  .stTabs [data-baseweb="tab"] {padding: 0.65rem 1rem; font-weight: 600; color: #334155; border-radius: 8px 8px 0 0; transition: background-color 150ms ease, color 150ms ease;}
+  .stTabs [data-baseweb="tab"]:hover {background: #E9EEF6; color: #1E40AF;}
+  .stTabs [aria-selected="true"] {color: #1E40AF;}
+
+  /* Charts, tables and panels */
+  [data-testid="stPlotlyChart"] {background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 0.25rem; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);}
+  [data-testid="stDataFrame"] {border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden;}
+  [data-testid="stExpander"] {border: 1px solid #DBEAFE; border-radius: 10px; background: #FFFFFF;}
+  [data-testid="stAlert"] {border-radius: 10px;}
+  hr {border-color: #DBEAFE;}
+
+  /* Keyboard focus and reduced motion */
   button:focus-visible, [role="tab"]:focus-visible, input:focus-visible {outline: 3px solid #1E40AF !important; outline-offset: 2px;}
   @media (prefers-reduced-motion: reduce) {* {animation: none !important; transition: none !important;}}
 </style>
@@ -51,6 +77,7 @@ REQUIRED_COLUMNS = {
     "by_ticker": {"ticker", "method", "confidence", "n_forecasts", "breaches", "breach_rate", "expected_rate", "kupiec_lr", "kupiec_p"},
     "ml_ic": {"date", "random_forest", "gradient_boosting", "ensemble"},
     "ml_latest": {"ticker", "predicted_63d_return"},
+    "metrics": {"ticker", "annual_vol", "mean_annual_return", "sharpe", "max_drawdown", "current_drawdown", "beta_vs_spy", "is_etf"},
 }
 REQUIRED_KEYS = {
     "info": set(),
@@ -72,6 +99,7 @@ def load_results():
         "ml_ic": pd.read_csv(r / "ml_rank_ic_by_date.csv", parse_dates=["date"]),
         "ml_latest": pd.read_csv(r / "ml_latest_forecasts.csv"),
         "ml_imp": pd.read_csv(r / "ml_feature_importance.csv", index_col=0).iloc[:, 0],
+        "metrics": pd.read_csv(r / "metrics.csv"),
         "membership": json.loads((r / "universe_membership_summary.json").read_text()),
     }
     for name, cols in REQUIRED_COLUMNS.items():  # a file with the wrong shape is reported by name, not as a KeyError deep inside a tab
@@ -130,6 +158,23 @@ def line_chart_layout(fig, title, yfmt=".1%", ytitle=None, height=430):
     return fig
 
 
+def panel_layout(fig, title, yfmt=".1%", ytitle=None, height=360):
+    """The layout shared by the smaller charts: left-aligned title, legend above the plot, light grid, unified hover."""
+    return line_chart_layout(fig, title, yfmt=yfmt, ytitle=ytitle, height=height)
+
+
+def test_period_growth(pf):
+    """Growth of 1 over the test period for every constructed preset and for SPY, with the same daily-rebalanced constant weights as the portfolio tab."""
+    test = returns.dropna(how="all").loc[config.TEST_START :]
+    curves = {}
+    for name, entry in pf["presets"].items():
+        if entry["status"] == "constructed":
+            daily, _ = portfolio.portfolio_returns(test, pd.Series(entry["weights"]))
+            curves[f"{name} portfolio"] = (1 + daily).cumprod()
+    curves["SPY"] = (1 + test[config.MARKET].fillna(0)).cumprod()
+    return pd.DataFrame(curves)
+
+
 # ----------------------------------------------------------------------------- header
 st.title("Risk dashboard")
 st.caption(
@@ -137,8 +182,8 @@ st.caption(
     f"{meta['tickers_returned']} of {meta['tickers_requested']} requested tickers returned data. Educational research tool, not investment advice."
 )
 
-tab_over, tab_var, tab_bt, tab_pf, tab_ml, tab_help = st.tabs(
-    ["Overview", "VaR explorer", "Backtest comparison", "Portfolio experiment", "Forecasting model", "Glossary and limits"]
+tab_over, tab_stock, tab_var, tab_bt, tab_pf, tab_ml, tab_help = st.tabs(
+    ["Overview", "Stock explorer", "VaR explorer", "Backtest comparison", "Portfolio experiment", "Forecasting model", "Glossary and limits"]
 )
 
 # ----------------------------------------------------------------------------- overview
@@ -151,6 +196,31 @@ with tab_over:
     c2.metric("Historical 99% VaR breach rate", pct(h99["pooled_breach_rate"]), f"expected {pct(h99['expected_rate'])}", delta_color="off", delta_arrow="off", help="Share of all forecast days on which the loss was bigger than the 99% VaR.")
     c3.metric("Normal 99% VaR breach rate", pct(n99["pooled_breach_rate"]), f"expected {pct(n99['expected_rate'])}", delta_color="off", delta_arrow="off")
     c4.metric("Forecast model R squared (test)", r2txt(ens["oos_r2_vs_training_mean"]), help="Against always predicting the training-period average. Below zero means worse than that. Undefined if every test target equals the training average.")
+
+    ov_conf_label = st.radio("Confidence level for the per-ticker breach chart", ["95%", "99%"], index=1, horizontal=True, key="ov_conf")
+    ov_conf = 0.95 if ov_conf_label == "95%" else 0.99
+    ch1, ch2 = st.columns(2)
+    growth = test_period_growth(R["portfolios"])
+    figg = go.Figure()
+    styles_g = {"SPY": dict(color=SLATE, dash="dot", width=2.5), "balanced portfolio": dict(color=BLUE, dash="solid", width=2.5), "aggressive portfolio": dict(color=AMBER, dash="dash", width=2.5), "conservative portfolio": dict(color=RED, dash="dashdot", width=2.5)}
+    for col in growth.columns:
+        figg.add_trace(go.Scatter(x=growth.index, y=growth[col], name=col, line=styles_g.get(col, dict(color=LIGHT_BLUE, width=2)), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>" + col + "</extra>"))
+    panel_layout(figg, f"Growth of 1 since {R['portfolios']['test_start']} (test period)", yfmt=".2f", ytitle="growth of 1")
+    ch1.plotly_chart(figg, width="stretch", key="ov_growth")
+    ch1.caption("Daily constant-weight rebalancing, no transaction costs, one period and one split. Weights were fixed with training data only.")
+    bt_all = R["by_ticker"][R["by_ticker"]["confidence"] == ov_conf]
+    figh = go.Figure()
+    size = 0.0025 if ov_conf == 0.99 else 0.005
+    for m, color, shape in zip(var.METHODS, (BLUE, AMBER), ("/", "x")):
+        figh.add_trace(go.Histogram(x=bt_all[bt_all["method"] == m]["breach_rate"], xbins=dict(start=0, size=size), name=m, opacity=0.65, marker=dict(color=color, pattern=dict(shape=shape)), hovertemplate="breach rate %{x:.2%}: %{y} tickers<extra>" + m + "</extra>"))
+    figh.add_vline(x=1 - ov_conf, line=dict(color="#000000", dash="dash", width=2), annotation_text=f"expected {1 - ov_conf:.0%}", annotation_position="top right")
+    panel_layout(figh, f"Breach rate of each ticker at {ov_conf_label}", yfmt="d", ytitle="number of tickers")
+    figh.update_layout(barmode="overlay", hovermode="closest")
+    figh.update_xaxes(tickformat=".1%", title="share of forecast days with a breach")
+    ch2.plotly_chart(figh, width="stretch", key="ov_breach_hist")
+    with st.expander("Data table: growth of 1 and per-ticker breach rates behind these charts"):
+        st.dataframe(growth.round(6), width="stretch")
+        st.dataframe(bt_all[["ticker", "method", "n_forecasts", "breaches", "breach_rate"]].sort_values("breach_rate", ascending=False), width="stretch", hide_index=True)
 
     st.subheader("What the real data shows")
     lines = []
@@ -189,6 +259,109 @@ with tab_over:
         f"and Yahoo returned no data for {len(meta['tickers_failed'])} of its tickers (mostly names that left the market). "
         f"Counting only days when each stock was a member does not change the backtest conclusions, but survivorship bias remains and its size is not measured."
     )
+
+# ----------------------------------------------------------------------------- stock explorer
+with tab_stock:
+    st.markdown(
+        "Every ticker in the data on one map, and one ticker in detail. The map uses the descriptive statistics in `results/metrics.csv` (whole sample, historical, not forecasts); "
+        "the charts below it are computed from the daily prices of the ticker you choose."
+    )
+    M = R["metrics"].copy()
+    a, b, c, d = st.columns([2, 2.4, 2.2, 2.4])
+    group = a.radio("Show on the map", ["Stocks", "ETFs", "Both"], index=2, horizontal=True, key="se_group")
+    sel = b.selectbox("Ticker to highlight and analyse (type to search)", ["SPY"] + [t for t in prices.columns if t != "SPY"], index=0, key="se_ticker")
+    period = c.radio("Period for the charts below", ["All data", "Last 3 years", "Last 1 year"], index=0, horizontal=True, key="se_period")
+    zoom = d.checkbox("Zoom the map to the main cluster", value=True, key="se_zoom", help="Sets both axes to the 1st to 99th percentile of the plotted tickers, with a margin, so a few extreme tickers do not squash the rest. Untick to see every ticker.")
+
+    shown = M if group == "Both" else M[M["is_etf"] == (group == "ETFs")]
+    fig_map = go.Figure()
+    for is_etf_flag, label, symbol in ((False, "stocks", "circle"), (True, "ETFs", "diamond")):
+        g = shown[shown["is_etf"] == is_etf_flag]
+        if g.empty:
+            continue
+        fig_map.add_trace(
+            go.Scatter(
+                x=g["annual_vol"], y=g["mean_annual_return"], mode="markers", name=label, text=g["ticker"],
+                marker=dict(symbol=symbol, size=9 if is_etf_flag else 7, color=g["sharpe"], colorscale=[[0, "#B45309"], [0.5, "#E2E8F0"], [1, "#1E40AF"]], cmin=-1.0, cmax=2.0, cmid=0.5,
+                            line=dict(width=0.6, color="#475569"), opacity=0.85, showscale=not is_etf_flag or shown[~shown["is_etf"]].empty,
+                            colorbar=dict(title="Sharpe", thickness=12, len=0.8)),
+                customdata=np.stack([g["sharpe"], g["max_drawdown"], g["beta_vs_spy"]], axis=1),
+                hovertemplate="<b>%{text}</b><br>return %{y:.1%}, volatility %{x:.1%}<br>Sharpe %{customdata[0]:.2f}, max drawdown %{customdata[1]:.1%}<extra>" + label + "</extra>",
+            )
+        )
+    row = M[M["ticker"] == sel]
+    if not row.empty:
+        fig_map.add_trace(go.Scatter(x=row["annual_vol"], y=row["mean_annual_return"], mode="markers+text", text=row["ticker"], textposition="top center", name=f"selected: {sel}",
+                                     marker=dict(symbol="circle-open", size=18, color=RED, line=dict(width=3, color=RED)), hoverinfo="skip"))
+    panel_layout(fig_map, "Risk and return of every ticker (whole sample, annualised)", yfmt=".0%", ytitle="mean annual return", height=520)
+    fig_map.update_xaxes(tickformat=".0%", title="annualised volatility")
+    fig_map.update_layout(hovermode="closest")
+    outside = 0
+    if zoom and len(shown) >= 20:
+        (x0, x1), (y0, y1) = shown["annual_vol"].quantile([0.01, 0.99]), shown["mean_annual_return"].quantile([0.01, 0.99])
+        px_, py_ = 0.15 * (x1 - x0), 0.15 * (y1 - y0)
+        fig_map.update_xaxes(range=[max(0.0, x0 - px_), x1 + px_])
+        fig_map.update_yaxes(range=[y0 - py_, y1 + py_])
+        outside = int(((shown["annual_vol"] < max(0.0, x0 - px_)) | (shown["annual_vol"] > x1 + px_) | (shown["mean_annual_return"] < y0 - py_) | (shown["mean_annual_return"] > y1 + py_)).sum())
+    st.plotly_chart(fig_map, width="stretch", key="se_map")
+    if outside:
+        st.caption(f"{outside} ticker(s) lie outside the zoomed view. Untick the zoom option to see them; they are all in the data table below.")
+    st.caption("Colour shows the Sharpe ratio and shape shows stocks (circles) or ETFs (diamonds), so neither relies on colour alone. Up and to the left is more return for less risk, in this sample only.")
+    with st.expander("Data table: the statistics behind the map"):
+        st.dataframe(shown[["ticker", "is_etf", "n_returns", "mean_annual_return", "annual_vol", "sharpe", "max_drawdown", "current_drawdown", "beta_vs_spy"]].sort_values("sharpe", ascending=False), width="stretch", hide_index=True)
+
+    st.subheader(f"{sel} in detail")
+    if row.empty:
+        st.warning(f"{sel} has fewer than 250 daily returns, so it is not in the statistics table. The charts below still use the prices it has.")
+    else:
+        r0 = row.iloc[0]
+        k = st.columns(6)
+        k[0].metric("Mean annual return", pct(r0["mean_annual_return"], 1))
+        k[1].metric("Annual volatility", pct(r0["annual_vol"], 1))
+        k[2].metric("Sharpe ratio", num(r0["sharpe"], ".2f"))
+        k[3].metric("Maximum drawdown", pct(r0["max_drawdown"], 1))
+        k[4].metric("Current drawdown", pct(r0["current_drawdown"], 1))
+        k[5].metric("Beta against SPY", num(r0["beta_vs_spy"], ".2f"), help="Undefined for SPY itself and when the benchmark is constant.")
+
+    px = prices[sel].dropna()
+    if period != "All data":
+        px = px.loc[px.index[-1] - pd.DateOffset(years=3 if period == "Last 3 years" else 1) :]
+    if len(px) < 130:
+        st.warning(f"Only {len(px)} prices are available for {sel} in this period, too few for the charts.")
+    else:
+        rets = px / px.shift(1) - 1.0
+        rets = rets.dropna()
+        growth_s = px / px.iloc[0]
+        drawdown = growth_s / growth_s.cummax() - 1.0
+        roll_vol = (rets.rolling(60, min_periods=60).std() * np.sqrt(TRADING_DAYS)).dropna()
+        c1, c2 = st.columns(2)
+        f1 = go.Figure(go.Scatter(x=growth_s.index, y=growth_s, name=sel, line=dict(color=BLUE, width=2), hovertemplate="%{x|%Y-%m-%d}: %{y:.3f}<extra>growth of 1</extra>"))
+        panel_layout(f1, f"{sel}: growth of 1 (adjusted close)", yfmt=".2f", ytitle="growth of 1")
+        c1.plotly_chart(f1, width="stretch", key="se_growth")
+        f2 = go.Figure(go.Scatter(x=drawdown.index, y=drawdown, name="drawdown", fill="tozeroy", line=dict(color=RED, width=1.5), fillcolor="rgba(220, 38, 38, 0.18)", hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra>drawdown</extra>"))
+        panel_layout(f2, f"{sel}: fall from the previous peak", yfmt=".0%", ytitle="drawdown")
+        c2.plotly_chart(f2, width="stretch", key="se_drawdown")
+        c3, c4 = st.columns(2)
+        f3 = go.Figure(go.Scatter(x=roll_vol.index, y=roll_vol, name="60-day volatility", line=dict(color=AMBER, width=2), hovertemplate="%{x|%Y-%m-%d}: %{y:.1%}<extra>60-day volatility</extra>"))
+        panel_layout(f3, f"{sel}: 60-day rolling volatility (annualised)", yfmt=".0%", ytitle="annualised volatility")
+        c3.plotly_chart(f3, width="stretch", key="se_rollvol")
+        mu_r, sd_r = float(rets.mean()), float(rets.std(ddof=1))
+        v99, _ = var.historical_var_es(rets.to_numpy(), 0.99)
+        bins = 60
+        f4 = go.Figure(go.Histogram(x=rets, nbinsx=bins, histnorm="probability density", name="daily returns", marker=dict(color=LIGHT_BLUE, line=dict(width=0.3, color="#FFFFFF")), opacity=0.8, hovertemplate="return %{x:.2%}<extra>daily returns</extra>"))
+        xs = np.linspace(float(rets.min()), float(rets.max()), 300)
+        f4.add_trace(go.Scatter(x=xs, y=np.exp(-0.5 * ((xs - mu_r) / sd_r) ** 2) / (sd_r * np.sqrt(2 * np.pi)), name="normal curve, same mean and standard deviation", line=dict(color="#0F172A", width=2, dash="dash"), hoverinfo="skip"))
+        f4.add_vline(x=-v99, line=dict(color=RED, dash="dot", width=2), annotation_text=f"historical 99% VaR {v99:.1%}", annotation_position="top left")
+        panel_layout(f4, f"{sel}: distribution of daily returns", yfmt=".0f", ytitle="density")
+        f4.update_layout(hovermode="closest")
+        f4.update_xaxes(tickformat=".0%", title="daily return")
+        c4.plotly_chart(f4, width="stretch", key="se_hist")
+        st.caption(
+            f"{len(rets):,} daily returns from {rets.index[0].date()} to {rets.index[-1].date()}. Skewness {rets.skew():.2f}, excess kurtosis {rets.kurt():.2f}: "
+            "an excess kurtosis above zero means more extreme days than the normal curve allows, which is why a normal VaR can understate tail risk."
+        )
+        with st.expander("Data table: values behind the four charts"):
+            st.dataframe(pd.DataFrame({"growth_of_1": growth_s, "drawdown": drawdown, "rolling_60d_volatility": roll_vol, "daily_return": px / px.shift(1) - 1.0}).round(6), width="stretch")
 
 # ----------------------------------------------------------------------------- VaR explorer
 with tab_var:
@@ -340,8 +513,22 @@ def show_portfolio(name, e, bench, key):
     )
     st.dataframe(stats, width="stretch")
     st.caption("Only the test-period columns are out-of-sample. The training column describes the data used to choose the portfolio.")
-    with st.expander("Data table: weights and growth of 1 behind the charts"):
+    corr = returns.loc[: config.TRAIN_END, w.index].corr()
+    show_values = len(corr) <= 12
+    figc = go.Figure(
+        go.Heatmap(
+            z=corr.to_numpy(), x=list(corr.columns), y=list(corr.index), zmin=-1, zmax=1, zmid=0, colorscale=[[0, "#B45309"], [0.5, "#F8FAFC"], [1, "#1E40AF"]],
+            colorbar=dict(title="correlation", thickness=12), hovertemplate="%{y} and %{x}: %{z:.2f}<extra></extra>",
+            **({"text": np.round(corr.to_numpy(), 2), "texttemplate": "%{text}", "textfont": dict(size=11)} if show_values else {}),
+        )
+    )
+    figc.update_layout(title=dict(text="Correlation of the holdings' daily returns in the training period", x=0, xanchor="left", font=dict(size=15)), height=max(380, 34 * len(corr) + 140), margin=dict(l=10, r=10, t=60, b=10), plot_bgcolor="#FFFFFF", paper_bgcolor="#F8FAFC", font=dict(color="#1E293B"))
+    figc.update_yaxes(autorange="reversed")
+    st.plotly_chart(figc, width="stretch", key=f"{key}_corr")
+    st.caption("Correlations close to 1 mean the holdings move together, so the portfolio is less diversified than its number of holdings suggests. Computed on the data used to choose the weights.")
+    with st.expander("Data table: weights, growth of 1 and correlations behind the charts"):
         st.dataframe(pd.DataFrame({"weight": w.iloc[::-1]}), width="stretch")
+        st.dataframe(corr.round(4), width="stretch")
         growth = pd.DataFrame({f"{name} (optimised weights)": (1 + d_p).cumprod(), "same holdings, equal weights": (1 + d_e).cumprod(), "SPY": (1 + spy).cumprod()})
         st.dataframe(growth, width="stretch")
 

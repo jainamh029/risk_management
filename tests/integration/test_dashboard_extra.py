@@ -140,7 +140,7 @@ def damaged_tree(tmp_path, mutate):
     return run_app(str(t / "dashboard" / "app.py"), timeout=120)
 
 
-RESULT_FILES = ["run_info.json", "var_backtest_summary.json", "var_backtest_by_ticker.csv", "portfolios.json", "ml_summary.json", "ml_rank_ic_by_date.csv", "ml_latest_forecasts.csv", "ml_feature_importance.csv", "universe_membership_summary.json"]
+RESULT_FILES = ["run_info.json", "var_backtest_summary.json", "var_backtest_by_ticker.csv", "portfolios.json", "ml_summary.json", "ml_rank_ic_by_date.csv", "ml_latest_forecasts.csv", "ml_feature_importance.csv", "universe_membership_summary.json", "metrics.csv"]
 
 
 @pytest.mark.parametrize("name", RESULT_FILES)
