@@ -259,7 +259,8 @@ def update_snapshot(
     1. Tickers already in the snapshot are downloaded only from `overlap_days` before the last stored date.
     2. The re-downloaded overlap is compared with the stored prices. Yahoo's prices are adjusted for splits and
        dividends after the fact, so a dividend or split since the last download changes every older price. If the overlap
-       agrees (relative difference at most `tolerance`), only the rows after the last stored date are appended.
+       agrees (relative difference at most `tolerance`), only the rows after the last stored date are appended, and so are any earlier days in the overlap that the ticker is
+       missing (a download that failed for one ticker on an earlier run is repaired by the next).
        If it disagrees, or there is no overlap to check, the stored history of that ticker is stale and its whole history
        is downloaded again and replaces it. Nothing is rescaled or patched.
     3. Tickers in `tickers` that are not in the snapshot are downloaded in full. Tickers that failed before (listed in
@@ -295,25 +296,27 @@ def update_snapshot(
         recent, rep_recent = fetch_prices(stored, start, end)
         to_refresh: list[str] = []
         append_cols: list[str] = []
+        fills: dict[str, pd.Series] = {}
         for t in stored:
             if t not in recent.columns:
                 report["kept_without_new_data"].append(t)  # nothing came back: the stored history stays as it is
                 continue
             new_s = recent[t].dropna()
             overlap = new_s.index[new_s.index <= last].intersection(prices[t].dropna().index)
-            after = new_s[new_s.index > last]
+            fill = new_s[~new_s.index.isin(prices[t].dropna().index)]  # prices the provider has that are not stored: new days, and days a previous run missed
             if len(overlap):
                 rel = ((new_s.loc[overlap] - prices[t].loc[overlap]).abs() / prices[t].loc[overlap]).max()
                 if rel > tolerance:
                     to_refresh.append(t)
                     report["refreshed"][t] = f"stored prices no longer match Yahoo (largest relative difference {rel:.2e}): a split, dividend or restatement"
                     continue
-            elif len(after):
+            elif len(fill):
                 to_refresh.append(t)  # new prices but nothing to compare them with
                 report["refreshed"][t] = "no overlapping days to check the stored prices against"
                 continue
-            if len(after):
+            if len(fill):
                 append_cols.append(t)
+                fills[t] = fill
         known_failed = set(meta.get("tickers_failed") or {})
         missing = [t for t in universe if t not in stored and (retry_failed or t not in known_failed)]
         report["skipped_known_failures"] = [t for t in universe if t not in stored and t in known_failed and not retry_failed]
@@ -329,7 +332,7 @@ def update_snapshot(
             if t not in refresh_frames.columns:
                 report["refreshed"][t] += "; the refresh failed, so the old history was kept"
         to_refresh = [t for t in to_refresh if t in refresh_frames.columns]
-        appended_rows = recent.loc[recent.index > last, append_cols].dropna(how="all")
+        appended_rows = pd.DataFrame(fills).sort_index() if fills else pd.DataFrame(index=pd.DatetimeIndex([], name=prices.index.name))
         report["appended"] = append_cols
 
     for t in [c for c in refresh_frames.columns if c in stored]:
@@ -345,7 +348,7 @@ def update_snapshot(
     union = prices.index.union(appended_rows.index).union(refresh_frames.index).sort_values()
     result = prices.reindex(union)
     if len(appended_rows):
-        result.loc[appended_rows.index, appended_rows.columns] = appended_rows
+        result.update(appended_rows)  # fills only the cells that have a new value; every other stored price stays as it is
     for t in refresh_frames.columns:
         result[t] = refresh_frames[t].reindex(union)
     result = result[stored + [t for t in refresh_frames.columns if t not in stored]]

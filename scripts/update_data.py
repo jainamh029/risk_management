@@ -56,6 +56,8 @@ def main(argv=None) -> int:
 
     print(f"{rep['mode']} update: last stored date {rep['last_date_before']} -> {rep['last_date_after']} ({rep['new_rows']} new day(s))")
     print(f"  tickers extended with new days: {len(rep['appended'])}; downloaded in full again: {len(rep['refreshed'])}; added: {len(rep['added'])}")
+    if rep["kept_without_new_data"]:
+        print(f"  {len(rep['kept_without_new_data'])} ticker(s) returned nothing for the period and keep their stored history: {', '.join(sorted(rep['kept_without_new_data'])[:12])}")
     for t, why in sorted(rep["refreshed"].items())[:10]:
         print(f"    {t}: {why}")
     for t, why in sorted(rep["refused"].items()):

@@ -404,3 +404,32 @@ def test_the_default_end_date_includes_a_day_only_after_the_us_market_has_closed
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.default_end(datetime.strptime(utc, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)) == expected
+
+
+def test_a_day_that_one_ticker_missed_on_an_earlier_run_is_filled_in_by_the_next_run(tmp_path, truth, monkeypatch):
+    """A download can fail for one ticker on one day (a locked cache, a timeout). The next run's overlap contains that day,
+    and the ticker's missing price is filled from the provider; nothing else is touched."""
+    prices, rf = truth
+    hole_day = N_STORED - 3
+    holed = prices.copy()
+    holed.iloc[hole_day, 2] = np.nan  # S02 has no price on that day in the stored snapshot
+    head = holed.iloc[:N_STORED]
+    meta = {"source": "stand-in", "downloaded_utc": "2024-02-06T00:00:00Z", "requested_start": REQUESTED_START, "requested_end_exclusive": "2024-02-07", "risk_free_series": "^IRX",
+            "tickers_requested": 4, "tickers_returned": 4, "tickers_failed": {}, **data.snapshot_report(head)}
+    data.save_snapshot(head, rf.iloc[:N_STORED], meta, tmp_path)
+    install(monkeypatch, prices, rf)  # the provider has the price
+    rep = data.update_snapshot(UNIVERSE, END, tmp_path)
+    got = data.load_snapshot(tmp_path)[0]
+    pd.testing.assert_frame_equal(got, prices, check_freq=False)  # equals a complete download, hole included
+    assert not np.isnan(got.iloc[hole_day, 2]) and rep["refreshed"] == {}
+
+
+def test_filling_a_missed_day_never_overwrites_a_stored_price_with_a_missing_one(tmp_path, truth, monkeypatch):
+    prices, rf = truth
+    make_snapshot(tmp_path, prices, rf)
+    partial = prices.copy()
+    partial.iloc[N_STORED - 2, 0] = np.nan  # the provider now lacks a day for S00 that is stored
+    install(monkeypatch, partial, rf)
+    data.update_snapshot(UNIVERSE, END, tmp_path)
+    got = data.load_snapshot(tmp_path)[0]
+    assert got.iloc[N_STORED - 2, 0] == prices.iloc[N_STORED - 2, 0]  # the stored value survives
