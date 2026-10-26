@@ -361,3 +361,65 @@ def test_the_verifier_exits_nonzero_when_the_summary_does_not_match_the_per_tick
     path.write_text(json.dumps(rows))
     out = run(tmp_path, ["scripts/verify_backtest_independent.py"], guard)
     assert out.returncode == 1 and "summary" in out.stdout and "does not match the per-ticker rows" in out.stdout
+
+
+# ----------------------------------------------------------------------------- update_data.py (incremental update)
+FAKE_YF_DATED = '''
+import time
+import numpy as np
+import pandas as pd
+time.sleep = lambda s: None
+FAIL = {"ABC", "ANSS", "DISH"}
+
+def _price(t, day_number):
+    return 50.0 + (sum(map(ord, t)) % 100) + 0.5 * day_number
+
+def download(tickers, start=None, end=None, **kw):
+    idx = pd.bdate_range(start, pd.Timestamp(end) - pd.Timedelta(days=1))
+    n = np.array([len(pd.bdate_range("2024-01-01", d)) - 1 for d in idx])
+    if tickers == "^IRX":
+        return pd.DataFrame({"Close": 4.0 + 0.01 * n}, index=idx) if len(idx) else pd.DataFrame()
+    names = tickers if isinstance(tickers, list) else [tickers]
+    keep = [t for t in names if t not in FAIL]
+    if not keep or not len(idx):
+        return pd.DataFrame()
+    return pd.DataFrame({(t, "Close"): [_price(t, k) for k in n] for t in keep}, index=idx)
+'''
+
+
+def dated_tree(tmp: Path):
+    guard = make_tree(tmp, data_files=("universe.csv",))
+    fake = tmp / "_fake"
+    fake.mkdir()
+    (fake / "yfinance.py").write_text(FAKE_YF_DATED)
+    return guard, fake
+
+
+def test_update_script_adds_only_the_new_days_and_equals_a_complete_download(tmp_path):
+    inc, full = tmp_path / "inc", tmp_path / "full"
+    inc.mkdir(), full.mkdir()
+    g1, f1 = dated_tree(inc)
+    g2, f2 = dated_tree(full)
+    assert run(inc, ["scripts/fetch_data.py", "--start", "2024-01-02", "--end", "2024-02-01"], g1, extra_path=[f1]).returncode == 0
+    first = run(inc, ["scripts/update_data.py", "--end", "2024-02-15"], g1, extra_path=[f1])
+    assert first.returncode == 0 and "2024-01-31 -> 2024-02-14 (10 new day(s))" in first.stdout and "downloaded in full again: 0" in first.stdout
+    assert run(full, ["scripts/fetch_data.py", "--start", "2024-01-02", "--end", "2024-02-15"], g2, extra_path=[f2]).returncode == 0
+    a, rf_a, meta_a = data.load_snapshot(inc / "data")
+    b, rf_b, meta_b = data.load_snapshot(full / "data")
+    pd.testing.assert_frame_equal(a, b, check_freq=False)  # the updated snapshot is what a complete download gives
+    assert rf_a.tolist() == rf_b.tolist() and meta_a["last_date"] == meta_b["last_date"] == "2024-02-14"
+    assert meta_a["update_log"][0]["new_rows"] == 10 and "update_log" not in meta_b
+    again = run(inc, ["scripts/update_data.py", "--end", "2024-02-15"], g1, extra_path=[f1])
+    assert again.returncode == 0 and "Already up to date" in again.stdout
+    assert no_network_attempts(inc) == [] and no_network_attempts(full) == []
+
+
+def test_update_script_without_a_snapshot_or_with_an_old_end_date_stops_with_a_clear_message(tmp_path):
+    guard, fake = dated_tree(tmp_path)
+    none = run(tmp_path, ["scripts/update_data.py", "--end", "2024-02-15"], guard, extra_path=[fake])
+    assert none.returncode == 1 and "scripts/fetch_data.py" in none.stdout and not (tmp_path / "data" / "prices.parquet").exists()
+    assert run(tmp_path, ["scripts/fetch_data.py", "--start", "2024-01-02", "--end", "2024-02-01"], guard, extra_path=[fake]).returncode == 0
+    before = (tmp_path / "data" / "prices.parquet").read_bytes()
+    old = run(tmp_path, ["scripts/update_data.py", "--end", "2024-01-10"], guard, extra_path=[fake])
+    assert old.returncode == 1 and "must be after the last stored date" in old.stdout
+    assert (tmp_path / "data" / "prices.parquet").read_bytes() == before

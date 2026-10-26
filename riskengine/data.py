@@ -10,6 +10,7 @@ Rules enforced here:
 from __future__ import annotations
 
 import json
+import os
 import time
 import warnings
 from datetime import datetime, timezone
@@ -140,10 +141,20 @@ def fetch_risk_free(start: str, end: str) -> pd.Series:
 
 
 def save_snapshot(prices: pd.DataFrame, rf: pd.Series, meta: dict, data_dir: Path = DATA_DIR) -> None:
+    """Write the three snapshot files. Each is written to a temporary name first and then renamed over the old file,
+    so a failure part-way never leaves a half-written file where a good snapshot was."""
     data_dir.mkdir(parents=True, exist_ok=True)
-    prices.to_parquet(data_dir / PRICES_FILE)
-    rf.to_frame().to_parquet(data_dir / RF_FILE)
-    (data_dir / META_FILE).write_text(json.dumps(meta, indent=2, sort_keys=True))
+    tmp = {name: data_dir / f".{name}.tmp" for name in (PRICES_FILE, RF_FILE, META_FILE)}
+    try:
+        prices.to_parquet(tmp[PRICES_FILE])
+        rf.to_frame().to_parquet(tmp[RF_FILE])
+        tmp[META_FILE].write_text(json.dumps(meta, indent=2, sort_keys=True))
+        for name, path in tmp.items():
+            os.replace(path, data_dir / name)
+    finally:
+        for path in tmp.values():
+            if path.exists():
+                path.unlink()
 
 
 def load_snapshot(data_dir: Path = DATA_DIR) -> tuple[pd.DataFrame, pd.Series, dict]:
@@ -223,3 +234,143 @@ def risk_free_annual(rf_percent: pd.Series, start=None, end=None) -> float:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# ----------------------------------------------------------------------------- incremental update
+OVERLAP_DAYS = 7  # calendar days before the last stored date that are downloaded again, to check the stored prices still agree
+ADJUSTMENT_TOLERANCE = 1e-6  # largest relative difference between a stored and a re-downloaded price that counts as "the same"
+
+
+def update_snapshot(
+    tickers: list[str],
+    end: str,
+    data_dir: Path = DATA_DIR,
+    full: bool = False,
+    overlap_days: int = OVERLAP_DAYS,
+    tolerance: float = ADJUSTMENT_TOLERANCE,
+) -> dict:
+    """Bring the stored snapshot up to date without downloading the whole history again.
+
+    `end` is exclusive (yfinance convention). The rule, in plain words:
+
+    1. Tickers already in the snapshot are downloaded only from `overlap_days` before the last stored date.
+    2. The re-downloaded overlap is compared with the stored prices. Yahoo's prices are adjusted for splits and
+       dividends after the fact, so a dividend or split since the last download changes every older price. If the overlap
+       agrees (relative difference at most `tolerance`), only the rows after the last stored date are appended.
+       If it disagrees, or there is no overlap to check, the stored history of that ticker is stale and its whole history
+       is downloaded again and replaces it. Nothing is rescaled or patched.
+    3. Tickers in `tickers` that are not in the snapshot (new, or failed last time) are downloaded in full.
+    4. The risk-free series is handled the same way.
+    5. `full=True` downloads everything again, like scripts/fetch_data.py.
+
+    The result is validated (sorted unique dates, positive finite prices) before anything is written, the files are
+    replaced atomically, and the snapshot is not touched at all if there is nothing new. Returns a report.
+    """
+    prices, rf, meta = load_snapshot(data_dir)
+    start_all = meta["requested_start"]
+    last = prices.index.max()
+    if pd.Timestamp(end) <= last:
+        raise ValueError(f"end ({end}) must be after the last stored date ({last.date()}); end is exclusive")
+    universe = list(dict.fromkeys(list(tickers)))
+    stored = list(prices.columns)
+    report = {"mode": "full" if full else "incremental", "last_date_before": str(last.date()), "appended": [], "refreshed": {}, "added": [], "failed": {}, "kept_without_new_data": [], "risk_free": ""}
+
+    if full:
+        new_prices, rep = fetch_prices(list(dict.fromkeys(universe + stored)), start_all, end)
+        refresh_frames, to_refresh = new_prices, list(new_prices.columns)
+        report["refreshed"] = {t: "full download requested" for t in to_refresh}
+        report["failed"] = dict(rep["failed"])
+        appended_rows = pd.DataFrame(index=pd.DatetimeIndex([], name=prices.index.name))
+    else:
+        start = (last - pd.Timedelta(days=overlap_days)).strftime("%Y-%m-%d")
+        recent, rep_recent = fetch_prices(stored, start, end)
+        to_refresh: list[str] = []
+        append_cols: list[str] = []
+        for t in stored:
+            if t not in recent.columns:
+                report["kept_without_new_data"].append(t)  # nothing came back: the stored history stays as it is
+                continue
+            new_s = recent[t].dropna()
+            overlap = new_s.index[new_s.index <= last].intersection(prices[t].dropna().index)
+            after = new_s[new_s.index > last]
+            if len(overlap):
+                rel = ((new_s.loc[overlap] - prices[t].loc[overlap]).abs() / prices[t].loc[overlap]).max()
+                if rel > tolerance:
+                    to_refresh.append(t)
+                    report["refreshed"][t] = f"stored prices no longer match Yahoo (largest relative difference {rel:.2e}): a split, dividend or restatement"
+                    continue
+            elif len(after):
+                to_refresh.append(t)  # new prices but nothing to compare them with
+                report["refreshed"][t] = "no overlapping days to check the stored prices against"
+                continue
+            if len(after):
+                append_cols.append(t)
+        missing = [t for t in universe if t not in stored]
+        report["added"] = missing
+        fetch_full = to_refresh + missing
+        if fetch_full:
+            refresh_frames, rep_full = fetch_prices(fetch_full, start_all, end)
+            report["failed"] = dict(rep_full["failed"])
+            report["added"] = [t for t in missing if t in refresh_frames.columns]
+        else:
+            refresh_frames = pd.DataFrame(index=pd.DatetimeIndex([], name=prices.index.name))
+        for t in to_refresh:
+            if t not in refresh_frames.columns:
+                report["refreshed"][t] += "; the refresh failed, so the old history was kept"
+        to_refresh = [t for t in to_refresh if t in refresh_frames.columns]
+        appended_rows = recent.loc[recent.index > last, append_cols].dropna(how="all")
+        report["appended"] = append_cols
+
+    union = prices.index.union(appended_rows.index).union(refresh_frames.index).sort_values()
+    result = prices.reindex(union)
+    if len(appended_rows):
+        result.loc[appended_rows.index, appended_rows.columns] = appended_rows
+    for t in refresh_frames.columns:
+        result[t] = refresh_frames[t].reindex(union)
+    result = result[stored + [t for t in refresh_frames.columns if t not in stored]]
+    result.index = pd.DatetimeIndex(result.index).as_unit(prices.index.unit)  # keep the stored time resolution so the file looks the same as a complete download
+    validate_prices(result)
+
+    # risk-free series: append the new days if the overlap agrees, otherwise download it all again
+    rf_full = full
+    if not full:
+        rf_start = (last - pd.Timedelta(days=overlap_days)).strftime("%Y-%m-%d")
+        new_rf = fetch_risk_free(rf_start, end)
+        both = new_rf.index.intersection(rf.index)
+        if len(both) and float((new_rf.loc[both] - rf.loc[both]).abs().max()) <= 1e-9:
+            rf_new = new_rf[new_rf.index > rf.index.max()]
+            rf_result = pd.concat([rf, rf_new]) if len(rf_new) else rf
+            report["risk_free"] = f"{len(rf_new)} new day(s) appended"
+        else:
+            rf_full = True
+    if rf_full:
+        rf_result = fetch_risk_free(start_all, end)
+        report["risk_free"] = "downloaded again in full" + ("" if full else " (the overlap did not match or could not be checked)")
+    rf_result = rf_result[~rf_result.index.duplicated(keep="last")].sort_index()
+    rf_result.index = pd.DatetimeIndex(rf_result.index).as_unit(rf.index.unit)
+    rf_result.name = RF_TICKER
+
+    changed = not result.equals(prices) or not rf_result.equals(rf) or set(result.columns) != set(prices.columns)
+    report["new_rows"] = int(len(result) - len(prices))
+    report["last_date_after"] = str(result.index.max().date())
+    report["written"] = bool(changed)
+    if not changed:
+        return report
+    snap = snapshot_report(result)
+    failed = {t: r for t, r in (meta.get("tickers_failed") or {}).items() if t not in result.columns}
+    failed.update({t: r for t, r in report["failed"].items() if t not in result.columns})
+    new_meta = {
+        **meta,
+        "first_downloaded_utc": meta.get("first_downloaded_utc", meta["downloaded_utc"]),
+        "downloaded_utc": utc_now(),
+        "requested_end_exclusive": end,
+        "tickers_requested": len(set(universe) | set(stored)),
+        "tickers_returned": int(result.shape[1]),
+        "tickers_failed": failed,
+        **snap,
+        "update_log": list(meta.get("update_log", []))
+        + [{"utc": utc_now(), "mode": report["mode"], "last_date_before": report["last_date_before"], "last_date_after": report["last_date_after"], "new_rows": report["new_rows"],
+            "tickers_appended": len(report["appended"]), "tickers_refreshed_in_full": sorted(report["refreshed"]), "tickers_added": report["added"], "risk_free": report["risk_free"]}],
+    }
+    save_snapshot(result, rf_result, new_meta, data_dir)
+    return report

@@ -140,7 +140,8 @@ A static report with the main charts, built from the real results, is published 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python scripts/fetch_data.py
+python scripts/fetch_data.py          # first time only: the whole history
+python scripts/update_data.py         # later: only the new days (add --rebuild to regenerate everything)
 python scripts/run_pipeline.py
 python scripts/verify_backtest_independent.py
 python scripts/check_sp500_membership.py
@@ -151,14 +152,14 @@ pytest -q
 
 `pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments. Statement and branch coverage of the package, the scripts and the dashboard is measured with `pytest --cov=riskengine --cov=dashboard --cov=scripts --cov-branch --cov-report=term-missing`; the scripts that the tests run as subprocesses are included only when `COVERAGE_PROCESS_START` points to `.coveragerc` (the procedure and the measured figures are in `ALL_MODULES_VALIDATION.md`).
 
-`scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`; it can be executed without modifying it with `jupyter nbconvert --to notebook --execute --output-dir /tmp/notebook_check notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
+`scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/update_data.py` adds only the days after the last stored date (plus a one-week overlap that is compared with the stored prices; a ticker whose stored prices no longer match Yahoo's, for example after a dividend or split, is downloaded in full again and replaced; if nothing is new no file is touched; the default end date is today, so an unfinished trading day is never stored). `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`; it can be executed without modifying it with `jupyter nbconvert --to notebook --execute --output-dir /tmp/notebook_check notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
 | `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/ml.py`, `riskengine/config.py` |
-| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py`, `scripts/build_site.py` |
+| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/update_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py`, `scripts/build_site.py` |
 | `dashboard/` | `dashboard/app.py` |
 | `docs/` | the static report published with GitHub Pages: `docs/index.html` and the plotting library `docs/plotly.min.js` |
 | `tests/` | `tests/unit` (hand-constructed fixtures, no market data, no network), `tests/integration` (the cached real-price snapshot and the stored results), `tests/statistical` (simulation experiments, marker `statistical`). If the snapshot is missing, every test that needs it is reported as BLOCKED and the run exits with status 10; nothing is downloaded |

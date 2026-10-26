@@ -3,6 +3,8 @@
     python scripts/fetch_data.py                       # default window
     python scripts/fetch_data.py --start 2019-01-01 --end 2026-10-24
 
+To add only the new days to an existing snapshot, use scripts/update_data.py instead.
+
 `--end` is exclusive (Yahoo Finance convention). The snapshot and a metadata
 file are written to data/. The price file is git-ignored; the metadata file
 is committed so the provenance of every result is recorded.
