@@ -106,15 +106,36 @@ def inconsistent_tickers(current: set, changes: pd.DataFrame, start: pd.Timestam
     return sorted(out)
 
 
+def load_sources():
+    """Read the cached source tables, or stop with a message that says exactly what is wrong. Nothing is guessed or defaulted."""
+    paths = {"current constituents": DATA / "sp500_current.csv", "index changes": DATA / "sp500_changes.csv", "provenance": DATA / "sp500_membership_meta.json"}
+    missing = [f"{name} ({p.name})" for name, p in paths.items() if not p.exists()]
+    if missing:
+        raise SystemExit(f"cached S&P 500 source file(s) missing: {', '.join(missing)}. Create them with: python scripts/check_sp500_membership.py --fetch")
+    try:
+        cur = pd.read_csv(paths["current constituents"])
+        ch = pd.read_csv(paths["index changes"])
+        src = json.loads(paths["provenance"].read_text())
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SystemExit(f"cached S&P 500 source tables are malformed: {exc}. Recreate them with: python scripts/check_sp500_membership.py --fetch")
+    for name, frame, need in (("current constituents", cur, {"ticker", "date_added"}), ("index changes", ch, {"date", "added", "removed", "reason"})):
+        if not need <= set(frame.columns):
+            raise SystemExit(f"cached {name} table is malformed: columns {sorted(need - set(frame.columns))} are missing. Recreate it with --fetch")
+    ch["date"] = pd.to_datetime(ch["date"], errors="coerce")
+    if ch["date"].isna().any():
+        raise SystemExit(f"cached index-changes table is malformed: {int(ch['date'].isna().sum())} unparseable date(s). Recreate it with --fetch")
+    if len(cur) != src.get("current_constituents_rows") or len(ch) != src.get("changes_rows"):
+        raise SystemExit(f"cached S&P 500 tables do not match their provenance file (current {len(cur)} vs {src.get('current_constituents_rows')}, changes {len(ch)} vs {src.get('changes_rows')}); they look truncated or edited. Recreate them with --fetch")
+    return cur, ch, src
+
+
 def analyse():
     from riskengine import data
 
     prices, _, meta = data.load_snapshot()
     returns = data.simple_returns(prices)
     uni = data.load_universe().set_index("ticker")
-    cur = pd.read_csv(DATA / "sp500_current.csv")
-    ch = pd.read_csv(DATA / "sp500_changes.csv", parse_dates=["date"])
-    src = json.loads((DATA / "sp500_membership_meta.json").read_text())
+    cur, ch, src = load_sources()
     current = set(cur["ticker"])
     dates = prices.index
     M = membership_matrix(dates, current, ch)

@@ -362,3 +362,8 @@ Remaining and not repaired:
 - **External-data assumptions that no test can settle:** the vendor's retroactive price adjustment (not strictly point-in-time); the accuracy of Yahoo Finance prices; Wikipedia as the membership source (the SATS contradiction, renamed symbols); and the `fetch_data.py` download step, which was not run (frozen snapshot).
 - **Not repeated in this stage:** the live browser checks (earlier stages) and dashboard reduced-motion behaviour.
 - **Empirical results are unchanged and are not evidence of skill:** VaR is miscalibrated at 99% (historical 1.59% breaches against 1% expected; normal 1.95%); the forecasting model shows no demonstrated skill (R squared against the training mean between -0.9% and -6.0%, rank IC 0.044, t = 0.60 on 11 independent periods); the portfolio results are one period on one split.
+
+## 26. Later audit
+
+`ALL_MODULES_VALIDATION.md` and `MODULE_TEST_MATRIX.md` record a module-by-module audit made after this report. Where they differ from sections 25 and earlier, they supersede them: the backtest `window` argument and the other arguments listed in section 25 as unvalidated are now validated (D43), and the final suite is 679 tests. The infinite-value policy in section 25 is unchanged and remains an open owner decision.
+

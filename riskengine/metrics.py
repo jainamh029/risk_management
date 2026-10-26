@@ -35,6 +35,8 @@ def beta(stock: pd.Series, market: pd.Series) -> float:
     both = pd.concat([stock, market], axis=1, join="inner").dropna()
     if len(both) < 2:
         return float("nan")
+    if np.all(both.iloc[:, 1].to_numpy() == both.iloc[0, 1]):
+        return float("nan")  # a constant benchmark has zero variance: beta is undefined (float rounding would otherwise give a huge number)
     cov = np.cov(both.iloc[:, 0], both.iloc[:, 1], ddof=1)
     return float(cov[0, 1] / cov[1, 1])
 

@@ -103,7 +103,7 @@ def test_every_test_named_in_the_documents_exists():
     defined = set()
     for f in (ROOT / "tests").rglob("test_*.py"):
         defined |= set(re.findall(r"^def (test_\w+)", f.read_text(), re.M))
-    for doc in ("AUDIT.md", "CLAIMS.md", "FORMULAS.md", "DECISIONS.md", "PROGRESS.md"):
+    for doc in ("AUDIT.md", "CLAIMS.md", "FORMULAS.md", "DECISIONS.md", "PROGRESS.md", "MODULE_TEST_MATRIX.md", "ALL_MODULES_VALIDATION.md"):
         text = (ROOT / doc).read_text()
         for name in set(re.findall(r"`(test_[\w*]+)`", text)):
             assert any(fnmatch.fnmatch(d, name) for d in defined), f"{doc} cites {name}, which does not exist"

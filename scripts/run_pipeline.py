@@ -27,6 +27,7 @@ def dump(name, obj):
     (OUT / name).write_text(serialize.dumps(obj, indent=2))
 
 
+config.validate()
 prices, rf, meta = data.load_snapshot()
 uni = data.load_universe().set_index("ticker")
 returns = data.simple_returns(prices)

@@ -19,6 +19,8 @@ Design choices that exist because of defects found in the original notebook:
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
@@ -85,6 +87,10 @@ def fit_models(train: pd.DataFrame):
     X, y = train[FEATURES].to_numpy(), train["y"].to_numpy()
     rf = RandomForestRegressor(random_state=config.ML_SEED, **config.ML_RF_PARAMS).fit(X, y)
     gb = GradientBoostingRegressor(random_state=config.ML_SEED, **config.ML_GB_PARAMS).fit(X, y)
+    # Fitting in parallel is exact (every tree has its own pre-drawn seed). Predicting in parallel is not: the per-tree
+    # outputs are summed in whatever order the threads finish, so the last bit of a forecast changes from call to call.
+    # Predictions are therefore made single-threaded, which makes every forecast, and every statistic derived from it, reproducible.
+    rf.set_params(n_jobs=1)
     return rf, gb
 
 
@@ -154,6 +160,10 @@ def _stats(s: pd.Series) -> dict:
 
 def score(pred: pd.Series, test: pd.DataFrame, baseline_mean: float, dates: pd.DatetimeIndex) -> dict:
     y = test["y"]
+    if not pred.index.equals(test.index):
+        raise ValueError("predictions and test targets must have identical indexes (same dates and tickers in the same order)")
+    if not (np.isfinite(pred.to_numpy(dtype=float)).all() and np.isfinite(y.to_numpy(dtype=float)).all() and math.isfinite(baseline_mean)):
+        raise ValueError("scoring inputs must be finite: predictions, targets and the baseline contain NaN or infinite values")
     sse_model = float(((y - pred) ** 2).sum())
     sse_base = float(((y - baseline_mean) ** 2).sum())  # reference: the training-mean forecast (not the test mean)
     if sse_base == 0.0:
@@ -176,6 +186,7 @@ def score(pred: pd.Series, test: pd.DataFrame, baseline_mean: float, dates: pd.D
 
 
 def run(prices: pd.DataFrame, is_etf: pd.Series) -> dict:
+    config.validate()
     stocks = [t for t in prices.columns if not bool(is_etf.get(t, False))]
     panel = build_panel(prices, stocks)
     dates = prices.index

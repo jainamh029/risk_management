@@ -46,10 +46,24 @@ def load_all():
     return prices, rf, meta, returns, uni
 
 
+REQUIRED_COLUMNS = {
+    "summary": {"method", "confidence", "n_tickers", "total_forecasts", "pooled_breach_rate", "expected_rate", "share_rejected", "zero_breach_tickers"},
+    "by_ticker": {"ticker", "method", "confidence", "n_forecasts", "breaches", "breach_rate", "expected_rate", "kupiec_lr", "kupiec_p"},
+    "ml_ic": {"date", "random_forest", "gradient_boosting", "ensemble"},
+    "ml_latest": {"ticker", "predicted_63d_return"},
+}
+REQUIRED_KEYS = {
+    "info": set(),
+    "portfolios": {"presets", "train_start", "train_end", "test_start", "test_end", "eligible_stocks", "benchmark_spy_test"},
+    "ml": {"models", "baselines", "info"},
+    "membership": {"current_members_in_list", "stocks_in_list", "current_members_not_in_list"},
+}
+
+
 @st.cache_data(show_spinner=False)
 def load_results():
     r = ROOT / "results"
-    return {
+    out = {
         "info": json.loads((r / "run_info.json").read_text()),
         "summary": pd.DataFrame(json.loads((r / "var_backtest_summary.json").read_text())),
         "by_ticker": pd.read_csv(r / "var_backtest_by_ticker.csv"),
@@ -58,17 +72,26 @@ def load_results():
         "ml_ic": pd.read_csv(r / "ml_rank_ic_by_date.csv", parse_dates=["date"]),
         "ml_latest": pd.read_csv(r / "ml_latest_forecasts.csv"),
         "ml_imp": pd.read_csv(r / "ml_feature_importance.csv", index_col=0).iloc[:, 0],
+        "membership": json.loads((r / "universe_membership_summary.json").read_text()),
     }
+    for name, cols in REQUIRED_COLUMNS.items():  # a file with the wrong shape is reported by name, not as a KeyError deep inside a tab
+        missing = cols - set(out[name].columns)
+        if missing:
+            raise ValueError(f"results file for '{name}' is missing columns {sorted(missing)}; regenerate it with python scripts/run_pipeline.py")
+    for name, keys in REQUIRED_KEYS.items():
+        if not isinstance(out[name], dict) or keys - set(out[name]):
+            raise ValueError(f"results file for '{name}' is missing keys {sorted(keys - set(out[name]))}; regenerate it with python scripts/run_pipeline.py" if isinstance(out[name], dict) else f"results file for '{name}' is not a JSON object")
+    return out
 
 
 try:
     prices, rf_series, meta, returns, uni = load_all()
     R = load_results()
-except FileNotFoundError as e:
-    st.error(f"A required file is missing: {e}")
+except (FileNotFoundError, ValueError) as e:  # ValueError covers malformed JSON and empty or unparseable CSV files
+    st.error(f"A required file is missing or unreadable: {e}")
     st.markdown(
         "Create the data and results first, then reload this page:\n\n"
-        "```\npython scripts/fetch_data.py\npython scripts/run_pipeline.py\n```"
+        "```\npython scripts/fetch_data.py\npython scripts/run_pipeline.py\npython scripts/check_sp500_membership.py\n```"
     )
     st.stop()
 
@@ -78,7 +101,12 @@ RF_TEST = data.risk_free_annual(rf_series, start=config.TEST_START)
 
 
 def pct(x, d=2):
-    return "n/a" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{100 * x:.{d}f}%"
+    return "undefined" if x is None or (isinstance(x, float) and np.isnan(x)) else f"{100 * x:.{d}f}%"
+
+
+def num(x, fmt=".3f"):
+    """A number formatted with fmt, or the word 'undefined' for null/NaN."""
+    return "undefined" if x is None or (isinstance(x, float) and np.isnan(x)) else format(x, fmt)
 
 
 def r2txt(x):
@@ -142,7 +170,7 @@ with tab_over:
     )
     for n in built:
         o = pf["presets"][n]["out_of_sample_test"]
-        lines.append(f"  - {n}: test Sharpe {o['sharpe']:.2f} against {pf['benchmark_spy_test']['sharpe']:.2f} for SPY over the same period (one period, one split).")
+        lines.append(f"  - {n}: test Sharpe {num(o['sharpe'], '.2f')} against {num(pf['benchmark_spy_test']['sharpe'], '.2f')} for SPY over the same period (one period, one split).")
     r2v = ens["oos_r2_vs_training_mean"]
     if r2v is None:
         r2_sentence = "out-of-sample R squared is undefined (every test target equals the training average)"
@@ -151,10 +179,10 @@ with tab_over:
     lines.append(
         f"- Forecast model (ensemble): {r2_sentence}; "
         f"direction accuracy {pct(ens['direction_accuracy'], 1)} against {pct(R['ml']['baselines']['share_of_test_samples_with_positive_return'], 1)} of test samples going up; "
-        f"rank IC {ens['rank_ic_nonoverlapping']['mean']:.3f} with t statistic {ens['rank_ic_nonoverlapping']['t_stat']:.2f} over {ens['rank_ic_nonoverlapping']['n']} independent periods."
+        f"rank IC {num(ens['rank_ic_nonoverlapping']['mean'])} with t statistic {num(ens['rank_ic_nonoverlapping']['t_stat'], '.2f')} over {ens['rank_ic_nonoverlapping']['n']} independent periods."
     )
     st.markdown("\n".join(lines))
-    mem = json.loads((ROOT / "results" / "universe_membership_summary.json").read_text())
+    mem = R["membership"]
     st.info(
         "Main limitation: the ticker list is hand-typed and is not the S&P 500. Compared with Wikipedia's record of index membership, "
         f"{mem['current_members_in_list']} of its {mem['stocks_in_list']} stocks are current members, {len(mem['current_members_not_in_list'])} current members are missing from it, "
@@ -303,10 +331,10 @@ def show_portfolio(name, e, bench, key):
     i, o, q = e["in_sample_train"], e["out_of_sample_test"], e["equal_weight_same_holdings_test"]
     stats = pd.DataFrame(
         {
-            "Training period (in-sample)": [pct(i["mean_annual_return"], 1), pct(i["annual_vol"], 1), f"{i['sharpe']:.2f}", pct(i["max_drawdown"], 1), pct(i["hist_var_99_1d"]), pct(i["total_return"], 1)],
-            "Test period (out-of-sample)": [pct(o["mean_annual_return"], 1), pct(o["annual_vol"], 1), f"{o['sharpe']:.2f}", pct(o["max_drawdown"], 1), pct(o["hist_var_99_1d"]), pct(o["total_return"], 1)],
-            "Test: same holdings, equal weights": [pct(q["mean_annual_return"], 1), pct(q["annual_vol"], 1), f"{q['sharpe']:.2f}", pct(q["max_drawdown"], 1), pct(q["hist_var_99_1d"]), pct(q["total_return"], 1)],
-            "Test: SPY": [pct(bench["mean_annual_return"], 1), pct(bench["annual_vol"], 1), f"{bench['sharpe']:.2f}", pct(bench["max_drawdown"], 1), pct(bench["hist_var_99_1d"]), pct(bench["total_return"], 1)],
+            "Training period (in-sample)": [pct(i["mean_annual_return"], 1), pct(i["annual_vol"], 1), num(i['sharpe'], '.2f'), pct(i["max_drawdown"], 1), pct(i["hist_var_99_1d"]), pct(i["total_return"], 1)],
+            "Test period (out-of-sample)": [pct(o["mean_annual_return"], 1), pct(o["annual_vol"], 1), num(o['sharpe'], '.2f'), pct(o["max_drawdown"], 1), pct(o["hist_var_99_1d"]), pct(o["total_return"], 1)],
+            "Test: same holdings, equal weights": [pct(q["mean_annual_return"], 1), pct(q["annual_vol"], 1), num(q['sharpe'], '.2f'), pct(q["max_drawdown"], 1), pct(q["hist_var_99_1d"]), pct(q["total_return"], 1)],
+            "Test: SPY": [pct(bench["mean_annual_return"], 1), pct(bench["annual_vol"], 1), num(bench['sharpe'], '.2f'), pct(bench["max_drawdown"], 1), pct(bench["hist_var_99_1d"]), pct(bench["total_return"], 1)],
         },
         index=["Mean annual return", "Annual volatility", "Sharpe ratio", "Maximum drawdown", "One-day 99% VaR (historical)", "Total return"],
     )
@@ -346,7 +374,7 @@ with tab_pf:
 
     with st.expander("Try your own screen"):
         st.warning(
-            "If you change these settings and then read the test-period numbers, you are tuning on the test data. "
+            "Exploratory only. If you change these settings and then read the test-period numbers, you are tuning on the test data. "
             "The results are no longer out-of-sample and will tend to look better than they would in practice."
         )
         a, b, c, d, f = st.columns(5)

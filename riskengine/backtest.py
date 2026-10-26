@@ -7,6 +7,7 @@ Windows that contain a missing return produce no forecast for that day.
 from __future__ import annotations
 
 import math
+import numbers
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,26 @@ from scipy.stats import chi2, norm
 from .var import METHODS, validate_confidence
 
 
+def validate_window(window) -> int:
+    """The rolling window must be an integer of at least 2 (a standard deviation needs two observations). Booleans are rejected."""
+    if isinstance(window, (bool, np.bool_)) or not isinstance(window, numbers.Integral):
+        raise ValueError(f"window must be an integer number of trading days, got {window!r} ({type(window).__name__})")
+    if window < 2:
+        raise ValueError(f"window must be at least 2 trading days, got {window}")
+    return int(window)
+
+
+def _count(value, name: str) -> int:
+    """A count must be an integer (an integer-valued float is accepted); booleans, NaN and fractions are rejected."""
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be a whole number, not a boolean ({value!r})")
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real) and math.isfinite(value) and float(value).is_integer():
+        return int(value)
+    raise ValueError(f"{name} must be a whole number, got {value!r}")
+
+
 def kupiec_pof(n: int, x: int, p: float) -> tuple[float, float]:
     """Kupiec likelihood-ratio test of the breach rate against p.
 
@@ -23,10 +44,11 @@ def kupiec_pof(n: int, x: int, p: float) -> tuple[float, float]:
     Returns (LR statistic, p-value) with a chi-square(1) reference.
     Computed in log space; x = 0 and x = n are handled exactly.
     """
-    if not (0.0 < p < 1.0):
-        raise ValueError("p must be in (0, 1)")
+    n, x = _count(n, "n"), _count(x, "x")
+    if isinstance(p, (bool, np.bool_)) or not isinstance(p, numbers.Real) or not (0.0 < p < 1.0):
+        raise ValueError(f"p must be a real number strictly between 0 and 1, got {p!r}")
     if n <= 0 or x < 0 or x > n:
-        raise ValueError("need n > 0 and 0 <= x <= n")
+        raise ValueError(f"need n > 0 and 0 <= x <= n, got n={n}, x={x}")
     ll_null = (n - x) * math.log1p(-p) + (x * math.log(p) if x > 0 else 0.0)
     ll_alt = 0.0
     if x > 0:
@@ -48,6 +70,7 @@ def rolling_forecasts(returns: np.ndarray, window: int, conf: float, method: str
     c = validate_confidence(conf)
     if method not in METHODS:
         raise ValueError(f"unknown method {method!r}; choose from {METHODS}")
+    window = validate_window(window)
     r = np.asarray(returns, dtype=float)
     out = np.full(r.shape[0], np.nan)
     if r.shape[0] <= window:
@@ -65,6 +88,7 @@ def rolling_forecasts(returns: np.ndarray, window: int, conf: float, method: str
 
 
 def backtest_series(returns: pd.Series, window: int = 250, confs=(0.95, 0.99), methods=METHODS) -> list[dict]:
+    window = validate_window(window)
     rows = []
     r = returns.values.astype(float)
     for m in methods:
@@ -93,6 +117,7 @@ def backtest_series(returns: pd.Series, window: int = 250, confs=(0.95, 0.99), m
 
 
 def backtest_universe(returns: pd.DataFrame, window: int = 250, confs=(0.95, 0.99), min_forecasts: int = 250) -> pd.DataFrame:
+    window = validate_window(window)
     rows = []
     for t in returns.columns:
         s = returns[t]
@@ -109,6 +134,8 @@ def summarise(bt: pd.DataFrame, alpha: float = 0.05) -> pd.DataFrame:
     Under a correct model about `alpha` of tickers would be rejected by chance;
     tickers are cross-sectionally dependent, so that figure is approximate.
     """
+    if bt.empty:  # no ticker had enough history: an empty summary with the usual columns, not a KeyError
+        return pd.DataFrame(columns=["method", "confidence", "n_tickers", "total_forecasts", "total_breaches", "mean_ticker_breach_rate", "share_rejected", "pooled_breach_rate", "expected_rate", "zero_breach_tickers"])
     g = bt.groupby(["method", "confidence"])
     out = g.agg(
         n_tickers=("ticker", "nunique"),

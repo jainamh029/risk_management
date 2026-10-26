@@ -46,7 +46,7 @@ Conventions used throughout: daily simple returns; 252 trading days per year; sa
 | Calmar | `CAGR / abs(max drawdown)` | same |
 | Max and current drawdown | worst and latest `P_t / max(P_s, s <= t) - 1` | `test_drawdowns_match_an_independent_loop` |
 | Skewness, excess kurtosis | sample (bias-adjusted) estimators | `scipy.stats.skew/kurtosis(bias=False)` in `test_compute_metrics_row_matches_hand_calculation` |
-| Beta | `cov(r_i, r_SPY) / var(r_SPY)` over common dates | `test_beta_matches_least_squares_slope` (`np.polyfit`) |
+| Beta | `cov(r_i, r_SPY) / var(r_SPY)` over common dates; undefined (NaN) when the benchmark's common-date returns are all equal or there are fewer than two common dates | `test_beta_matches_least_squares_slope` (`np.polyfit`), `test_beta_uses_only_dates_present_in_both_series_and_is_undefined_for_constant_or_disjoint_benchmarks` |
 | 1/3/6/12-month return | `P_last / P_(last-k) - 1`, k = 21, 63, 126, 252; NaN if the history is shorter | `test_compute_metrics_row_matches_hand_calculation`, `test_short_histories_get_nan_not_a_substitute` |
 
 ## Portfolio (`riskengine/portfolio.py`)

@@ -146,7 +146,7 @@ python scripts/make_readme_tables.py
 pytest -q
 ```
 
-`pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments.
+`pytest -q` runs all three test directories. `pytest tests/unit` needs no data. `pytest -m statistical` runs only the simulation experiments. Statement and branch coverage of the package, the scripts and the dashboard is measured with `pytest --cov=riskengine --cov=dashboard --cov=scripts --cov-branch --cov-report=term-missing`; the scripts that the tests run as subprocesses are included only when `COVERAGE_PROCESS_START` points to `.coveragerc` (the procedure and the measured figures are in `ALL_MODULES_VALIDATION.md`).
 
 `scripts/verify_backtest_independent.py` recomputes every backtest result with a separate plain-loop implementation and exits with an error if any number differs. `python scripts/check_sp500_membership.py --fetch` refreshes the stored Wikipedia tables. `scripts/fetch_data.py` takes several minutes and writes `data/prices.parquet` (git-ignored) and `data/prices_meta.json`. Downloading again later gives a different end date and different results; run the pipeline and the README script again afterwards. The walkthrough notebook is `notebooks/walkthrough.ipynb`; it can be executed without modifying it with `jupyter nbconvert --to notebook --execute --output-dir /tmp/notebook_check notebooks/walkthrough.ipynb`. The dashboard starts with `streamlit run dashboard/app.py` after the pipeline has run.
 
@@ -161,6 +161,7 @@ pytest -q
 | `results/` | files written by the pipeline |
 | `data/` | `data/universe.csv`, `data/prices_meta.json`, `data/sp500_current.csv`, `data/sp500_changes.csv`, `data/sp500_membership_meta.json`; the price file `data/prices.parquet` is git-ignored |
 | `legacy/` | the original README, kept for the audit trail; the original notebook is in git history (commit `888104c`) and is superseded by the code above |
+| `MODULE_TEST_MATRIX.md`, `ALL_MODULES_VALIDATION.md`, `VALIDATION_REPORT.md` | the per-module test matrix, the module-by-module acceptance audit with its commands and counts, and the earlier acceptance report |
 | `AUDIT.md`, `CLAIMS.md`, `FORMULAS.md`, `PROGRESS.md`, `DECISIONS.md` | the review of the original notebook, the register of every formula and the test that checks it, and the record of what was changed |
 
 ## Disclaimer

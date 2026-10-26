@@ -55,6 +55,8 @@ def max_sharpe_weights(train_returns: pd.DataFrame, rf_annual: float, bounds: tu
     if not res.success:
         raise RuntimeError(f"optimizer did not converge: {res.message}")
     w = res.x
+    if not np.isfinite(w).all():
+        raise RuntimeError("optimizer returned non-finite weights")
     if abs(w.sum() - 1.0) > 1e-6 or w.min() < lo - 1e-8 or w.max() > hi + 1e-8:
         raise RuntimeError("optimizer returned weights outside the constraints")
     return w
@@ -96,6 +98,7 @@ def fit(returns: pd.DataFrame, prices: pd.DataFrame, is_etf: pd.Series, rf_train
 
     Anything after TRAIN_END in the inputs is ignored (sliced off here).
     """
+    config.validate()
     returns = returns.dropna(how="all")  # the first date has no return for any ticker by construction
     train = returns.loc[: config.TRAIN_END]
     if train.empty:

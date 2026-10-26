@@ -1,0 +1,25 @@
+[run]
+branch = True
+source =
+    riskengine
+    dashboard
+    scripts
+parallel = True
+
+[paths]
+# tests/integration/test_scripts.py runs copies of the package and scripts inside pytest temporary trees; map them back to the repository
+riskengine =
+    riskengine
+    */pytest-of-*/pytest-*/*/riskengine
+    */pytest-of-*/pytest-*/*/repo/riskengine
+scripts =
+    scripts
+    */pytest-of-*/pytest-*/*/scripts
+    */pytest-of-*/pytest-*/*/repo/scripts
+dashboard =
+    dashboard
+    */pytest-of-*/pytest-*/*/tree/dashboard
+    */pytest-of-*/pytest-*/*/second/tree/dashboard
+
+[report]
+show_missing = True

@@ -124,7 +124,16 @@ def fetch_risk_free(start: str, end: str) -> pd.Series:
 
     warnings.filterwarnings("ignore", module=r"yfinance.*")
     raw = yf.download(RF_TICKER, start=start, end=end, progress=False, auto_adjust=True)
-    s = raw["Close"].squeeze().dropna()
+    if raw is None or raw.empty:
+        raise ValueError(f"Yahoo Finance returned no data for {RF_TICKER} between {start} and {end}")
+    if "Close" not in raw.columns:
+        raise ValueError(f"the Yahoo Finance response for {RF_TICKER} has no Close column (columns: {list(raw.columns)[:5]})")
+    close = raw["Close"]
+    if isinstance(close, pd.DataFrame):  # one column per symbol; there is exactly one symbol here
+        close = close.iloc[:, 0]
+    s = close.dropna()
+    if s.empty:
+        raise ValueError(f"the Yahoo Finance response for {RF_TICKER} has no observations between {start} and {end}")
     s.index = pd.DatetimeIndex(s.index).tz_localize(None).normalize()
     s.name = RF_TICKER
     return s
@@ -172,8 +181,33 @@ def snapshot_report(prices: pd.DataFrame) -> dict:
     }
 
 
+def validate_prices(prices: pd.DataFrame) -> None:
+    """Documented policy for a price table. Raises ValueError if it is violated.
+
+    - The index must be strictly increasing: sorted and without duplicate timestamps (returns are taken between
+      adjacent rows, so an unsorted or duplicated index would silently pair the wrong days).
+    - A missing price is NaN. Every observed (non-NaN) price must be finite and strictly positive; zero, negative
+      and infinite prices are data errors, not missing values, and are never converted or dropped.
+    """
+    idx = prices.index
+    if not idx.is_unique:
+        raise ValueError(f"price index has duplicate timestamps (for example {idx[idx.duplicated()][0]!r}); remove or aggregate them explicitly")
+    if not idx.is_monotonic_increasing:
+        raise ValueError("price index is not sorted in increasing order; sort it explicitly before computing returns")
+    values = prices.to_numpy(dtype=float)
+    observed = values[~np.isnan(values)]
+    if not np.isfinite(observed).all():
+        raise ValueError(f"prices contain {int((~np.isfinite(observed)).sum())} infinite value(s); use NaN for a missing price")
+    if (observed <= 0).any():
+        raise ValueError(f"observed prices must be strictly positive; found {int((observed <= 0).sum())} value(s) <= 0 (use NaN for a missing price)")
+
+
 def simple_returns(prices: pd.DataFrame) -> pd.DataFrame:
-    """Daily simple returns. NaN wherever today's or yesterday's price is NaN. No filling."""
+    """Daily simple returns. NaN wherever today's or yesterday's price is NaN. No filling.
+
+    The price table must satisfy validate_prices (strictly increasing index; observed prices finite and positive).
+    """
+    validate_prices(prices)
     return prices / prices.shift(1) - 1.0
 
 
