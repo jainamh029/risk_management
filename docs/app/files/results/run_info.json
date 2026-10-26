@@ -1,0 +1,39 @@
+{
+  "config": {
+    "window": 250,
+    "confidences": [
+      0.95,
+      0.99
+    ],
+    "train_end": "2023-12-31",
+    "test_start": "2024-01-01",
+    "market": "SPY",
+    "min_assets": 4
+  },
+  "data": {
+    "downloaded_utc": "2026-10-25T05:57:48Z",
+    "first_date": "2019-01-02",
+    "last_date": "2026-10-23",
+    "n_dates": 1964,
+    "tickers_requested": 483,
+    "tickers_returned": 462,
+    "tickers_failed": 21,
+    "etfs_returned": 10,
+    "stocks_returned": 452,
+    "risk_free_all": 0.02742007127916298,
+    "risk_free_train": 0.018844173310042487,
+    "risk_free_test": 0.042701203921023584
+  },
+  "var_latest": {
+    "n_tickers": 458,
+    "excluded_incomplete_window": 4,
+    "window_start": "2025-10-27",
+    "window_end": "2026-10-23"
+  },
+  "backtest": {
+    "n_tickers": 458
+  },
+  "metrics": {
+    "n_tickers": 458
+  }
+}

@@ -1,12 +1,17 @@
 """Build the static report that GitHub Pages serves (docs/index.html).
 
-    python scripts/build_site.py            # write docs/index.html and docs/plotly.min.js
-    python scripts/build_site.py --check    # exit 1 if docs/index.html differs from a fresh build
+    python scripts/build_site.py            # write docs/ (the report and the interactive dashboard)
+    python scripts/build_site.py --check    # exit 1 if anything in docs/ differs from a fresh build
 
-GitHub Pages serves static files only, so it cannot run the Streamlit dashboard (`streamlit run dashboard/app.py`).
-This page shows the same real numbers and the main charts, fixed in time: every figure comes from the files in results/
-and from the frozen price snapshot, and the page loads nothing from the network (the plotting library is copied next to it).
-The build is deterministic, so the checked-in page can be compared with a fresh build.
+GitHub Pages serves static files only, so it cannot run a Python server. It publishes two things:
+
+* docs/index.html, a report with the main charts, fixed in time. Every figure comes from results/ and the frozen price
+  snapshot, and the page loads nothing from the network (the plotting library is copied next to it).
+* docs/app/, the real Streamlit dashboard (dashboard/app.py, unchanged) running inside the visitor's browser with stlite
+  (Streamlit on Pyodide, WebAssembly). The page downloads the dashboard code, the riskengine package, results/ and the
+  price snapshot from docs/app/files/ and loads stlite and Pyodide from the jsDelivr CDN. Nothing runs on a server.
+
+The build is deterministic, so the checked-in files can be compared with a fresh build.
 """
 import argparse
 import html
@@ -237,7 +242,7 @@ footer{padding:28px 16px 40px;color:var(--muted);font-size:.9rem}
 <header>
 <h1>Risk dashboard report</h1>
 <p class="lead">Real daily prices from Yahoo Finance, {d['first_date']} to {d['last_date']}, downloaded {meta['downloaded_utc']}. {d['tickers_returned']} of {d['tickers_requested']} requested tickers returned data. Educational research tool, not investment advice.</p>
-<div class="notice"><strong>This is a fixed snapshot.</strong> GitHub Pages serves static files, so this page cannot run the interactive Streamlit dashboard. It shows the same numbers and main charts as they were when the page was built. To explore interactively (choose any ticker, window and confidence level), run the dashboard yourself: see the end of this page.</div>
+<div class="notice"><strong>This page is a fixed report.</strong> It shows the numbers and main charts as they were when the page was built. <a href="app/"><strong>Open the interactive dashboard</strong></a> to choose any ticker, window and confidence level: it is the real Streamlit dashboard, running in your browser (the first load takes about a minute). You can also run it on your own computer: see the end of this page.</div>
 </header>
 <main>
 <section aria-labelledby="h-over"><h2 id="h-over">Headline numbers</h2>
@@ -280,6 +285,72 @@ streamlit run dashboard/app.py</pre>
     return page
 
 
+STLITE = "1.12.0"  # the @stlite/browser version the app was tested with; a newer one is not picked up silently
+APP_REQUIREMENTS = ["numpy", "pandas", "scipy", "scikit-learn", "pyarrow", "plotly==7.1.0"]  # all but plotly come with Pyodide; plotly is fetched from PyPI when the page loads
+APP_FILES = (
+    [Path("dashboard/app.py"), Path(".streamlit/config.toml")]
+    + [Path("riskengine") / p.name for p in sorted((ROOT / "riskengine").glob("*.py"))]
+    + [Path("data") / n for n in ("prices.parquet", "tbill_13w.parquet", "prices_meta.json", "universe.csv")]
+    + [Path("results") / n for n in (
+        "run_info.json", "var_backtest_summary.json", "var_backtest_by_ticker.csv", "portfolios.json", "ml_summary.json",
+        "ml_rank_ic_by_date.csv", "ml_latest_forecasts.csv", "ml_feature_importance.csv", "metrics.csv", "universe_membership_summary.json",
+    )]
+)
+
+
+def build_app() -> dict[str, bytes]:
+    """The files of docs/app/: the stlite page and a byte-for-byte copy of everything the dashboard reads."""
+    out = {f"files/{p.as_posix()}": (ROOT / p).read_bytes() for p in APP_FILES}
+    mount = {
+        "entrypoint": "dashboard/app.py",
+        "requirements": APP_REQUIREMENTS,
+        "files": {p.as_posix(): {"url": f"./files/{p.as_posix()}"} for p in APP_FILES},
+    }
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk dashboard (interactive)</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="The interactive risk dashboard running in the browser. No server: Python runs in WebAssembly.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@stlite/browser@{STLITE}/build/stlite.css">
+<style>
+body{{margin:0;background:#F8FAFC;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#1E293B}}
+#bar{{background:#0F172A;color:#E2E8F0;padding:8px 16px;font-size:.9rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center}}
+#bar a{{color:#93C5FD}} #bar a:focus-visible{{outline:3px solid #93C5FD;outline-offset:2px}}
+#loading{{max-width:640px;margin:48px auto;padding:0 16px;line-height:1.55}}
+#loading h1{{font-size:1.4rem;border-left:6px solid #1E40AF;padding-left:10px;color:#0F172A}}
+.muted{{color:#475569}}
+</style>
+</head>
+<body>
+<div id="bar"><span>Risk dashboard, running in your browser</span><a href="../">Static report</a><a href="{REPO}">Source code</a></div>
+<div id="loading" role="status">
+<h1>Loading the dashboard</h1>
+<p>Python, pandas and scikit-learn are being downloaded into your browser and the real price data is being read. The first load takes about a minute and uses a few tens of megabytes; later visits are faster because the browser caches them.</p>
+<p class="muted">Nothing is sent to a server: everything runs on your computer. Educational research tool, not investment advice.</p>
+<noscript>This dashboard needs JavaScript.</noscript>
+</div>
+<div id="root"></div>
+<script type="module">
+import {{ mount }} from "https://cdn.jsdelivr.net/npm/@stlite/browser@{STLITE}/build/stlite.js";
+const config = {json.dumps(mount, indent=2)};
+try {{
+  mount(config, document.getElementById("root"));
+  const hide = () => {{ const el = document.getElementById("loading"); if (el && document.querySelector("#root [data-testid='stApp'], #root .stApp")) el.remove(); }};
+  new MutationObserver(hide).observe(document.getElementById("root"), {{ childList: true, subtree: true }});
+}} catch (e) {{
+  document.getElementById("loading").insertAdjacentHTML("beforeend", "<p><strong>The dashboard could not start:</strong> " + String(e) + "</p>");
+}}
+</script>
+</body>
+</html>
+"""
+    out["index.html"] = page.encode()
+    return out
+
+
 def plotly_js() -> Path:
     return Path(plotly.__file__).parent / "package_data" / "plotly.min.js"
 
@@ -289,16 +360,25 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="exit 1 if docs/index.html differs from a fresh build")
     args = ap.parse_args()
     page = build()
+    app = build_app()
     target = OUT / "index.html"
     if args.check:
-        same = target.exists() and target.read_text() == page
-        print("docs/index.html is up to date" if same else "docs/index.html is stale: run python scripts/build_site.py")
-        return 0 if same else 1
+        stale = [] if target.exists() and target.read_text() == page else ["docs/index.html"]
+        stale += [f"docs/app/{k}" for k, v in app.items() if not (OUT / "app" / k).exists() or (OUT / "app" / k).read_bytes() != v]
+        extra = sorted(str(p.relative_to(OUT)) for p in (OUT / "app" / "files").rglob("*") if p.is_file() and p.relative_to(OUT / "app").as_posix() not in app) if (OUT / "app" / "files").exists() else []
+        print("docs/ is up to date" if not stale and not extra else f"docs/ is stale ({', '.join(stale + extra)}): run python scripts/build_site.py")
+        return 0 if not stale and not extra else 1
     OUT.mkdir(exist_ok=True)
     target.write_text(page)
     shutil.copyfile(plotly_js(), OUT / "plotly.min.js")
     (OUT / ".nojekyll").write_text("")
-    print(f"wrote {target} ({len(page):,} characters) and plotly.min.js")
+    if (OUT / "app").exists():
+        shutil.rmtree(OUT / "app")  # the folder is wholly generated; remove files that are no longer part of the app
+    for rel, content in app.items():
+        path = OUT / "app" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    print(f"wrote {target} ({len(page):,} characters), plotly.min.js and docs/app/ ({len(app)} files)")
     return 0
 
 
