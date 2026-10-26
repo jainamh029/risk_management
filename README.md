@@ -106,6 +106,8 @@ All numbers above are written by `scripts/make_readme_tables.py` from the files 
 
 ## Dashboard
 
+A static report with the main charts, built from the real results, is published with GitHub Pages at https://jainamh029.github.io/risk_management/ (GitHub Pages serves static files, so it cannot run the interactive dashboard described below; `scripts/build_site.py` writes it into `docs/`, and a test fails if `docs/index.html` is out of date with the results).
+
 `dashboard/app.py` reads the downloaded data and the files in `results/`. Tabs: overview (headline numbers, growth of 1 for the portfolios against SPY over the test period, and the breach rate of every ticker against the expected rate), a stock explorer (a risk and return map of every ticker, and for one ticker its growth, drawdown, 60-day volatility and return distribution against a normal curve, over all data, three years or one year), a VaR explorer (choose ticker, confidence, window and method; the forecast, breaches and Kupiec test are recomputed live), the backtest comparison with filters and a sortable table, the portfolio experiment (with optional screen sliders and a correlation matrix chart of the holdings in the training period), the forecasting evaluation with a filterable table of the latest forecasts, and a glossary. Charts support hover and zoom, series are distinguished by line style and marker as well as colour, and every chart has a data table. Changing portfolio thresholds and then reading the test-period numbers is tuning on the test data, and the dashboard says so next to the controls.
 
 ## Method
@@ -143,6 +145,7 @@ python scripts/run_pipeline.py
 python scripts/verify_backtest_independent.py
 python scripts/check_sp500_membership.py
 python scripts/make_readme_tables.py
+python scripts/build_site.py
 pytest -q
 ```
 
@@ -155,8 +158,9 @@ pytest -q
 | Path | Contents |
 |---|---|
 | `riskengine/` | `riskengine/data.py`, `riskengine/var.py`, `riskengine/backtest.py`, `riskengine/metrics.py`, `riskengine/portfolio.py`, `riskengine/ml.py`, `riskengine/config.py` |
-| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py` |
+| `scripts/` | `scripts/build_universe.py`, `scripts/fetch_data.py`, `scripts/run_pipeline.py`, `scripts/make_readme_tables.py`, `scripts/build_notebook.py`, `scripts/verify_backtest_independent.py`, `scripts/check_sp500_membership.py`, `scripts/build_site.py` |
 | `dashboard/` | `dashboard/app.py` |
+| `docs/` | the static report published with GitHub Pages: `docs/index.html` and the plotting library `docs/plotly.min.js` |
 | `tests/` | `tests/unit` (hand-constructed fixtures, no market data, no network), `tests/integration` (the cached real-price snapshot and the stored results), `tests/statistical` (simulation experiments, marker `statistical`). If the snapshot is missing, every test that needs it is reported as BLOCKED and the run exits with status 10; nothing is downloaded |
 | `results/` | files written by the pipeline |
 | `data/` | `data/universe.csv`, `data/prices_meta.json`, `data/sp500_current.csv`, `data/sp500_changes.csv`, `data/sp500_membership_meta.json`; the price file `data/prices.parquet` is git-ignored |
