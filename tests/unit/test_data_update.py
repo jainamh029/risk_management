@@ -180,7 +180,7 @@ def test_a_new_ticker_is_downloaded_in_full_and_a_failed_one_is_recorded_not_inv
     meta.update(tickers_requested=4, tickers_failed={"S03": "empty response"})
     data.save_snapshot(head, rf.iloc[:N_STORED], meta, tmp_path)
     p = install(monkeypatch, prices.assign(), rf)
-    rep = data.update_snapshot(UNIVERSE + ["NOPE"], END, tmp_path)
+    rep = data.update_snapshot(UNIVERSE + ["NOPE"], END, tmp_path, retry_failed=True)  # S03 failed before; retried on request
     got, _, m = data.load_snapshot(tmp_path)
     assert rep["added"] == ["S03"] and "NOPE" in rep["failed"] and "NOPE" not in got.columns
     pd.testing.assert_frame_equal(got, prices, check_freq=False)
@@ -329,3 +329,78 @@ def test_if_the_full_download_of_a_changed_ticker_fails_the_old_history_is_kept_
     pd.testing.assert_series_equal(got["S01"].iloc[: len(head)], head["S01"], check_freq=False)  # the stored history was not touched
     assert got["S01"].iloc[len(head) :].isna().all()  # and no new prices were attached to a history that no longer matches
     assert sorted(rep["appended"]) == ["S00", "S02", "S03"]
+
+
+def test_tickers_that_failed_before_are_not_retried_unless_asked(tmp_path, truth, monkeypatch):
+    prices, rf = truth
+    head = prices.drop(columns="S03").iloc[:N_STORED]
+    meta = {"source": "stand-in", "downloaded_utc": "2024-02-06T00:00:00Z", "requested_start": REQUESTED_START, "requested_end_exclusive": "2024-02-07", "risk_free_series": "^IRX",
+            "tickers_requested": 4, "tickers_returned": 3, "tickers_failed": {"S03": "empty response"}, **data.snapshot_report(head)}
+    data.save_snapshot(head, rf.iloc[:N_STORED], meta, tmp_path)
+    p = install(monkeypatch, prices, rf)
+    rep = data.update_snapshot(UNIVERSE, END, tmp_path)
+    assert rep["skipped_known_failures"] == ["S03"] and rep["added"] == [] and not any("S03" in c[0] for c in p.ticker_calls())  # not even requested
+    assert "S03" not in data.load_snapshot(tmp_path)[0].columns and list(json.loads((tmp_path / data.META_FILE).read_text())["tickers_failed"]) == ["S03"]
+
+
+def reassigned(prices, ticker, n_rows):
+    """The provider now returns, for `ticker`, only a short history of some other security."""
+    other = prices.copy()
+    other[ticker] = np.nan
+    other.loc[other.index[-n_rows:], ticker] = 7.0 + np.arange(n_rows)
+    return other
+
+
+def test_a_symbol_that_now_means_something_else_keeps_the_old_history_and_adds_nothing(tmp_path, truth, monkeypatch):
+    """Real case found on 2026-10-26: Yahoo returned one day of another company for a symbol that had 1,431 stored days.
+    The stored history of that ticker has no overlap with the answer, so it is flagged for a full download, and the full
+    download is then refused because it covers almost none of the stored dates."""
+    prices, rf = truth
+    head = make_snapshot(tmp_path, prices, rf)
+    p = install(monkeypatch, reassigned(prices, "S01", 3), rf)
+    rep = data.update_snapshot(UNIVERSE, END, tmp_path)
+    got = data.load_snapshot(tmp_path)[0]
+    assert list(rep["refused"]) == ["S01"] and "only 0%" in rep["refused"]["S01"] and "S01" not in rep["refreshed"]
+    pd.testing.assert_series_equal(got["S01"].iloc[: len(head)], head["S01"], check_freq=False)
+    assert got["S01"].iloc[len(head) :].isna().all()  # the other company's prices are not attached to the old history
+    pd.testing.assert_frame_equal(got[["S00", "S02", "S03"]], prices[["S00", "S02", "S03"]], check_freq=False)  # everything else updated normally
+    assert json.loads((tmp_path / data.META_FILE).read_text())["update_log"][0]["tickers_refused"] == ["S01"]
+
+
+@pytest.mark.parametrize("covered,expect_refused", [(25, False), (23, False), (22, True), (0, True)])
+def test_the_history_coverage_rule_applies_to_a_full_download_too_and_has_a_sharp_boundary(tmp_path, truth, monkeypatch, covered, expect_refused):
+    prices, rf = truth
+    head = make_snapshot(tmp_path, prices, rf)  # 25 stored dates; 90% of 25 is 22.5, so at least 23 must be covered
+    thin = prices.copy()
+    thin.iloc[: N_STORED - covered, 1] = np.nan  # S01 loses its first (25 - covered) stored dates
+    install(monkeypatch, thin, rf)
+    rep = data.update_snapshot(UNIVERSE, END, tmp_path, full=True)
+    assert (list(rep["refused"]) == ["S01"]) is expect_refused
+    if expect_refused:
+        pd.testing.assert_series_equal(data.load_snapshot(tmp_path)[0]["S01"].iloc[: len(head)], head["S01"], check_freq=False)  # the old history is intact
+    else:
+        pd.testing.assert_series_equal(data.load_snapshot(tmp_path)[0]["S01"], thin["S01"], check_freq=False)  # accepted: equal to the new download
+
+
+@pytest.mark.parametrize(
+    "utc,expected",
+    [
+        ("2026-10-26 23:00", "2026-10-27"),  # Monday 7 pm New York (daylight time): the day just finished is included
+        ("2026-10-26 20:30", "2026-10-26"),  # Monday 4:30 pm New York: the market has only just closed, so wait
+        ("2026-10-26 04:50", "2026-10-26"),  # Monday 12:50 am New York: today has not traded yet
+        ("2026-10-24 23:00", "2026-10-24"),  # Saturday: nothing new, today is excluded
+        ("2026-10-25 23:00", "2026-10-25"),  # Sunday
+        ("2026-12-01 22:00", "2026-12-02"),  # Tuesday 5 pm New York (standard time): included
+        ("2026-12-01 21:59", "2026-12-01"),  # one minute before 5 pm New York in winter
+        ("2026-10-30 23:00", "2026-10-31"),  # Friday evening: Saturday as the exclusive end
+    ],
+)
+def test_the_default_end_date_includes_a_day_only_after_the_us_market_has_closed(utc, expected):
+    import importlib.util
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("update_data", Path(__file__).resolve().parents[2] / "scripts" / "update_data.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.default_end(datetime.strptime(utc, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)) == expected

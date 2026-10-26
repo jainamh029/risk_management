@@ -239,6 +239,7 @@ def utc_now() -> str:
 # ----------------------------------------------------------------------------- incremental update
 OVERLAP_DAYS = 7  # calendar days before the last stored date that are downloaded again, to check the stored prices still agree
 ADJUSTMENT_TOLERANCE = 1e-6  # largest relative difference between a stored and a re-downloaded price that counts as "the same"
+MIN_HISTORY_COVERAGE = 0.9  # a re-downloaded history replaces the stored one only if it has a price on at least this share of the stored dates
 
 
 def update_snapshot(
@@ -248,6 +249,8 @@ def update_snapshot(
     full: bool = False,
     overlap_days: int = OVERLAP_DAYS,
     tolerance: float = ADJUSTMENT_TOLERANCE,
+    retry_failed: bool = False,
+    min_coverage: float = MIN_HISTORY_COVERAGE,
 ) -> dict:
     """Bring the stored snapshot up to date without downloading the whole history again.
 
@@ -259,9 +262,15 @@ def update_snapshot(
        agrees (relative difference at most `tolerance`), only the rows after the last stored date are appended.
        If it disagrees, or there is no overlap to check, the stored history of that ticker is stale and its whole history
        is downloaded again and replaces it. Nothing is rescaled or patched.
-    3. Tickers in `tickers` that are not in the snapshot (new, or failed last time) are downloaded in full.
+    3. Tickers in `tickers` that are not in the snapshot are downloaded in full. Tickers that failed before (listed in
+       the metadata, usually delisted names) are skipped unless `retry_failed` is set, so a daily run does not spend
+       minutes retrying them.
     4. The risk-free series is handled the same way.
     5. `full=True` downloads everything again, like scripts/fetch_data.py.
+    6. A re-downloaded history replaces a stored one only if it has a price on at least `min_coverage` of the stored
+       dates. Otherwise the provider is describing something else (a symbol reassigned to another company, a
+       truncated response): the stored history is kept, no new prices are attached to it, and the ticker is listed
+       under `refused` in the report.
 
     The result is validated (sorted unique dates, positive finite prices) before anything is written, the files are
     replaced atomically, and the snapshot is not touched at all if there is nothing new. Returns a report.
@@ -273,7 +282,7 @@ def update_snapshot(
         raise ValueError(f"end ({end}) must be after the last stored date ({last.date()}); end is exclusive")
     universe = list(dict.fromkeys(list(tickers)))
     stored = list(prices.columns)
-    report = {"mode": "full" if full else "incremental", "last_date_before": str(last.date()), "appended": [], "refreshed": {}, "added": [], "failed": {}, "kept_without_new_data": [], "risk_free": ""}
+    report = {"mode": "full" if full else "incremental", "last_date_before": str(last.date()), "appended": [], "refreshed": {}, "refused": {}, "added": [], "failed": {}, "kept_without_new_data": [], "skipped_known_failures": [], "risk_free": ""}
 
     if full:
         new_prices, rep = fetch_prices(list(dict.fromkeys(universe + stored)), start_all, end)
@@ -305,7 +314,9 @@ def update_snapshot(
                 continue
             if len(after):
                 append_cols.append(t)
-        missing = [t for t in universe if t not in stored]
+        known_failed = set(meta.get("tickers_failed") or {})
+        missing = [t for t in universe if t not in stored and (retry_failed or t not in known_failed)]
+        report["skipped_known_failures"] = [t for t in universe if t not in stored and t in known_failed and not retry_failed]
         report["added"] = missing
         fetch_full = to_refresh + missing
         if fetch_full:
@@ -321,6 +332,16 @@ def update_snapshot(
         appended_rows = recent.loc[recent.index > last, append_cols].dropna(how="all")
         report["appended"] = append_cols
 
+    for t in [c for c in refresh_frames.columns if c in stored]:
+        old_dates = prices[t].dropna().index
+        covered = len(old_dates.intersection(refresh_frames[t].dropna().index)) / len(old_dates) if len(old_dates) else 1.0
+        if covered < min_coverage:
+            report["refused"][t] = (
+                f"the new download has prices on only {covered:.0%} of the {len(old_dates)} stored dates (needs {min_coverage:.0%}); "
+                "the symbol may now belong to another company or the response is incomplete, so the stored history was kept and no new prices were added"
+            )
+            report["refreshed"].pop(t, None)
+            refresh_frames = refresh_frames.drop(columns=t)
     union = prices.index.union(appended_rows.index).union(refresh_frames.index).sort_values()
     result = prices.reindex(union)
     if len(appended_rows):
@@ -370,7 +391,7 @@ def update_snapshot(
         **snap,
         "update_log": list(meta.get("update_log", []))
         + [{"utc": utc_now(), "mode": report["mode"], "last_date_before": report["last_date_before"], "last_date_after": report["last_date_after"], "new_rows": report["new_rows"],
-            "tickers_appended": len(report["appended"]), "tickers_refreshed_in_full": sorted(report["refreshed"]), "tickers_added": report["added"], "risk_free": report["risk_free"]}],
+            "tickers_appended": len(report["appended"]), "tickers_refreshed_in_full": sorted(report["refreshed"]), "tickers_refused": sorted(report["refused"]), "tickers_added": report["added"], "risk_free": report["risk_free"]}],
     }
     save_snapshot(result, rf_result, new_meta, data_dir)
     return report

@@ -1,17 +1,19 @@
-"""Build the static report that GitHub Pages serves (docs/index.html).
+"""Build the web pages that GitHub Pages serves: a static report and the interactive dashboard.
 
-    python scripts/build_site.py            # write docs/ (the report and the interactive dashboard)
-    python scripts/build_site.py --check    # exit 1 if anything in docs/ differs from a fresh build
+    python scripts/build_site.py                  # write the report and the interactive dashboard into docs/ (git-ignored)
+    python scripts/build_site.py --out some_dir   # or into another folder, as the daily workflow does
+    python scripts/build_site.py --check          # exit 1 if the output folder differs from a fresh build
 
 GitHub Pages serves static files only, so it cannot run a Python server. It publishes two things:
 
-* docs/index.html, a report with the main charts, fixed in time. Every figure comes from results/ and the frozen price
+* index.html, a report with the main charts, fixed in time. Every figure comes from results/ and the frozen price
   snapshot, and the page loads nothing from the network (the plotting library is copied next to it).
-* docs/app/, the real Streamlit dashboard (dashboard/app.py, unchanged) running inside the visitor's browser with stlite
+* app/, the real Streamlit dashboard (dashboard/app.py, unchanged) running inside the visitor's browser with stlite
   (Streamlit on Pyodide, WebAssembly). The page downloads the dashboard code, the riskengine package, results/ and the
-  price snapshot from docs/app/files/ and loads stlite and Pyodide from the jsDelivr CDN. Nothing runs on a server.
+  price snapshot from app/files/ and loads stlite and Pyodide from the jsDelivr CDN. Nothing runs on a server.
 
-The build is deterministic, so the checked-in files can be compared with a fresh build.
+The build is deterministic. The pages are not kept on the main branch: the daily GitHub Actions workflow
+(.github/workflows/daily-update.yml) builds them after each data update and publishes them on the `pages` branch.
 """
 import argparse
 import html
@@ -31,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 from riskengine import config, data, ml, portfolio, var  # noqa: E402
 
 BLUE, LIGHT_BLUE, AMBER, RED, SLATE = "#1E40AF", "#3B82F6", "#D97706", "#DC2626", "#64748B"
-OUT = ROOT / "docs"
+DEFAULT_OUT = ROOT / "docs"
 REPO = "https://github.com/jainamh029/risk_management"
 
 
@@ -299,7 +301,7 @@ APP_FILES = (
 
 
 def build_app() -> dict[str, bytes]:
-    """The files of docs/app/: the stlite page and a byte-for-byte copy of everything the dashboard reads."""
+    """The files of app/: the stlite page and a byte-for-byte copy of everything the dashboard reads."""
     out = {f"files/{p.as_posix()}": (ROOT / p).read_bytes() for p in APP_FILES}
     mount = {
         "entrypoint": "dashboard/app.py",
@@ -357,18 +359,20 @@ def plotly_js() -> Path:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--check", action="store_true", help="exit 1 if docs/index.html differs from a fresh build")
+    ap.add_argument("--check", action="store_true", help="exit 1 if the output folder differs from a fresh build")
+    ap.add_argument("--out", type=Path, default=DEFAULT_OUT, help="output folder (default: docs/)")
     args = ap.parse_args()
+    OUT = args.out.resolve()
     page = build()
     app = build_app()
     target = OUT / "index.html"
     if args.check:
-        stale = [] if target.exists() and target.read_text() == page else ["docs/index.html"]
-        stale += [f"docs/app/{k}" for k, v in app.items() if not (OUT / "app" / k).exists() or (OUT / "app" / k).read_bytes() != v]
+        stale = [] if target.exists() and target.read_text() == page else ["index.html"]
+        stale += [f"app/{k}" for k, v in app.items() if not (OUT / "app" / k).exists() or (OUT / "app" / k).read_bytes() != v]
         extra = sorted(str(p.relative_to(OUT)) for p in (OUT / "app" / "files").rglob("*") if p.is_file() and p.relative_to(OUT / "app").as_posix() not in app) if (OUT / "app" / "files").exists() else []
-        print("docs/ is up to date" if not stale and not extra else f"docs/ is stale ({', '.join(stale + extra)}): run python scripts/build_site.py")
+        print(f"{args.out} is up to date" if not stale and not extra else f"{args.out} is stale ({', '.join(stale + extra)}): run python scripts/build_site.py")
         return 0 if not stale and not extra else 1
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     target.write_text(page)
     shutil.copyfile(plotly_js(), OUT / "plotly.min.js")
     (OUT / ".nojekyll").write_text("")
@@ -378,7 +382,7 @@ def main() -> int:
         path = OUT / "app" / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(content)
-    print(f"wrote {target} ({len(page):,} characters), plotly.min.js and docs/app/ ({len(app)} files)")
+    print(f"wrote {target} ({len(page):,} characters), plotly.min.js and {OUT / 'app'} ({len(app)} files)")
     return 0
 
 

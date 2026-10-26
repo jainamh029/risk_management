@@ -238,4 +238,5 @@ def test_F33_the_independent_verifier_imports_nothing_from_the_package_and_passe
     assert not any("riskengine" in v for v in strings if v != doc)
     proc = subprocess.run([sys.executable, str(path)], capture_output=True, text=True, timeout=600)
     assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-500:]
-    assert "ALL MATCH" in proc.stdout and "1832" in proc.stdout
+    n_results = len(pd.read_csv(ROOT / "results" / "var_backtest_by_ticker.csv"))  # tickers x methods x confidence levels: follows the data, not a fixed number
+    assert "ALL MATCH" in proc.stdout and f"compared {n_results} ticker" in proc.stdout

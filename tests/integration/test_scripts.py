@@ -6,6 +6,7 @@ run under a sitecustomize that makes every socket operation fail and logs the at
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -197,7 +198,10 @@ def test_readme_generator_check_mode_detects_drift_and_the_plain_run_repairs_it(
     ok = run(tmp_path, ["scripts/make_readme_tables.py", "--check"], guard)
     assert ok.returncode == 0
     original = (tmp_path / "README.md").read_text()
-    (tmp_path / "README.md").write_text(original.replace("| historical | 99% | 458 | 779,137 | 1.59%", "| historical | 99% | 458 | 779,137 | 9.99%", 1))
+    row = re.search(r"\| historical \| 99% \| \d+ \| [\d,]+ \| (\d+\.\d+)%", original)  # the pooled breach rate of the first table, whatever the data
+    edited = original[: row.start(1)] + "9.99" + original[row.end(1) :]
+    assert edited != original
+    (tmp_path / "README.md").write_text(edited)
     assert run(tmp_path, ["scripts/make_readme_tables.py", "--check"], guard).returncode == 1  # a hand-edited number is detected
     assert run(tmp_path, ["scripts/make_readme_tables.py"], guard).returncode == 0 and (tmp_path / "README.md").read_text() == original
     (tmp_path / "results" / "ml_summary.json").unlink()

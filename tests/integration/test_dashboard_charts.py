@@ -60,7 +60,7 @@ def test_overview_breach_histogram_counts_every_ticker_once_per_method_and_marks
     stored = pd.read_csv(ROOT / "results" / "var_backtest_by_ticker.csv")
     for trace, method in zip(fig["data"], ("historical", "normal")):
         rates = stored[(stored["method"] == method) & (stored["confidence"] == conf)]["breach_rate"].to_numpy()
-        assert np.allclose(np.sort(decode(trace["x"])), np.sort(rates), atol=1e-15) and len(decode(trace["x"])) == 458
+        assert np.allclose(np.sort(decode(trace["x"])), np.sort(rates), atol=1e-15) and len(decode(trace["x"])) == stored["ticker"].nunique()
     line = fig["layout"]["shapes"][0]
     assert line["x0"] == pytest.approx(1 - conf) and f"{1 - conf:.0%}" in fig["layout"]["annotations"][0]["text"]
     assert title(fig) == f"Breach rate of each ticker at {label}"
@@ -81,7 +81,7 @@ def test_the_risk_return_map_plots_exactly_the_stored_statistics(app, metrics_cs
     spy = metrics_csv[metrics_csv["ticker"] == "SPY"].iloc[0]
     sel = next(t for t in fig["data"] if t["name"] == "selected: SPY")
     assert decode(sel["x"])[0] == pytest.approx(spy["annual_vol"]) and decode(sel["y"])[0] == pytest.approx(spy["mean_annual_return"])
-    assert len(by_name["stocks"]["text"]) + len(by_name["ETFs"]["text"]) == len(metrics_csv) == 458
+    assert len(by_name["stocks"]["text"]) + len(by_name["ETFs"]["text"]) == len(metrics_csv)
 
 
 @pytest.mark.parametrize("group,expected", [("Stocks", {"stocks"}), ("ETFs", {"ETFs"}), ("Both", {"stocks", "ETFs"})])

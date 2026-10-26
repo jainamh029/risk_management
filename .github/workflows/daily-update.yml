@@ -1,0 +1,107 @@
+# Adds each new trading day to the price data, regenerates the results and republishes the web pages.
+#
+# It runs at 23:00 UTC on weekdays: 7 pm US Eastern daylight time (6 pm in winter), after the market has closed. Weekends and
+# market holidays give no new rows, so the update finds nothing and the run ends without changing anything. If a run is missed
+# or fails, the next one downloads every missing day, so no trading day is lost.
+#
+# The price snapshot is not stored on the main branch (it is git-ignored). The only copy used here is the one published
+# with the web pages on the `pages` branch, which this workflow replaces each time (a single commit, so the repository does
+# not grow by the size of the prices every day).
+name: Daily data update
+
+on:
+  schedule:
+    - cron: "0 23 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Regenerate, test and publish even if no new data arrived"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install the pinned requirements
+        run: pip install -r requirements.txt
+
+      - name: Restore the stored prices from the pages branch
+        run: |
+          git fetch --depth=1 origin pages
+          mkdir -p data
+          for f in prices.parquet tbill_13w.parquet prices_meta.json; do
+            git show "origin/pages:app/files/data/$f" > "data/$f"
+          done
+          python - <<'PY'
+          from riskengine import data
+          prices, rf, meta = data.load_snapshot()
+          print(f"restored: {prices.shape[1]} tickers, {prices.index.min().date()} to {prices.index.max().date()}")
+          PY
+
+      - name: Add the new trading days
+        id: update
+        run: |
+          python scripts/update_data.py | tee update.log
+          if grep -q "Snapshot written" update.log; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Regenerate the results and the README tables
+        if: steps.update.outputs.changed == 'true' || inputs.force_rebuild
+        run: |
+          python scripts/run_pipeline.py
+          python scripts/check_sp500_membership.py
+          python scripts/make_readme_tables.py
+          python scripts/verify_backtest_independent.py
+
+      - name: Run the test suite
+        if: steps.update.outputs.changed == 'true' || inputs.force_rebuild
+        run: pytest -q
+
+      - name: Commit the results to main
+        if: steps.update.outputs.changed == 'true' || inputs.force_rebuild
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results README.md data/prices_meta.json
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            LAST=$(python -c "import json; print(json.load(open('data/prices_meta.json'))['last_date'])")
+            git commit -m "Daily data update: prices through $LAST"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Build the web pages and publish them on the pages branch
+        if: steps.update.outputs.changed == 'true' || inputs.force_rebuild
+        run: |
+          python scripts/build_site.py --out site
+          cd site
+          git init -q -b pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Web pages built from the data through $(python -c "import json; print(json.load(open('../data/prices_meta.json'))['last_date'])")"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages:pages
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" || echo "could not request a Pages build; GitHub builds on push anyway"

@@ -7,3 +7,5 @@ data/*.parquet
 .coverage
 coverage.json
 htmlcov/
+docs/
+site/
