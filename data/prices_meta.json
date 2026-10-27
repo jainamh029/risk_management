@@ -1,5 +1,5 @@
 {
-  "downloaded_utc": "2026-10-25T05:57:48Z",
+  "downloaded_utc": "2026-10-27T01:48:51Z",
   "fewer_than_250_valid_prices": {
     "AVB": 1,
     "EA": 1,
@@ -7,8 +7,9 @@
     "WBD": 1
   },
   "first_date": "2019-01-02",
+  "first_downloaded_utc": "2026-10-25T05:57:48Z",
   "internal_gap_counts": {},
-  "last_date": "2026-10-23",
+  "last_date": "2026-10-26",
   "listed_after_start": [
     "ABNB",
     "AGL",
@@ -27,8 +28,8 @@
     "VLTO",
     "WBD"
   ],
-  "n_dates": 1964,
-  "requested_end_exclusive": "2026-10-24",
+  "n_dates": 1965,
+  "requested_end_exclusive": "2026-10-27",
   "requested_start": "2019-01-01",
   "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
   "risk_free_series": "^IRX",
@@ -37,6 +38,9 @@
     "AVB",
     "EA",
     "EQR",
+    "HUBB",
+    "PARA",
+    "UA",
     "WBD"
   ],
   "tickers_failed": {
@@ -63,5 +67,24 @@
     "WBA": "empty response"
   },
   "tickers_requested": 483,
-  "tickers_returned": 462
+  "tickers_returned": 462,
+  "update_log": [
+    {
+      "last_date_after": "2026-10-26",
+      "last_date_before": "2026-10-23",
+      "mode": "incremental",
+      "new_rows": 1,
+      "risk_free": "1 new day(s) appended",
+      "tickers_added": [],
+      "tickers_appended": 453,
+      "tickers_refreshed_in_full": [
+        "CAT",
+        "PAYX"
+      ],
+      "tickers_refused": [
+        "PARA"
+      ],
+      "utc": "2026-10-27T01:48:51Z"
+    }
+  ]
 }
