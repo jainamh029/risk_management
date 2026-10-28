@@ -1,0 +1,106 @@
+{
+  "downloaded_utc": "2026-10-28T02:01:03Z",
+  "fewer_than_250_valid_prices": {
+    "AVB": 1,
+    "EA": 1,
+    "EQR": 1,
+    "WBD": 1
+  },
+  "first_date": "2019-01-02",
+  "first_downloaded_utc": "2026-10-25T05:57:48Z",
+  "internal_gap_counts": {},
+  "last_date": "2026-10-27",
+  "listed_after_start": [
+    "ABNB",
+    "AGL",
+    "AVB",
+    "CARR",
+    "CEG",
+    "CTVA",
+    "DOW",
+    "EA",
+    "EQR",
+    "FOX",
+    "FOXA",
+    "GEHC",
+    "OTIS",
+    "PARA",
+    "VLTO",
+    "WBD"
+  ],
+  "n_dates": 1966,
+  "requested_end_exclusive": "2026-10-28",
+  "requested_start": "2019-01-01",
+  "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
+  "risk_free_series": "^IRX",
+  "source": "Yahoo Finance via yfinance, auto_adjust=True (split and dividend adjusted close)",
+  "stopped_before_end": [
+    "AVB",
+    "EA",
+    "EQR",
+    "HUBB",
+    "PARA",
+    "UA",
+    "WBD"
+  ],
+  "tickers_failed": {
+    "ABC": "empty response",
+    "ANSS": "empty response",
+    "BK": "empty response",
+    "BLD": "empty response",
+    "CMA": "empty response",
+    "CTLT": "empty response",
+    "CTRA": "empty response",
+    "DFS": "empty response",
+    "DISH": "empty response",
+    "HES": "empty response",
+    "HOLX": "empty response",
+    "IPG": "empty response",
+    "JNPR": "empty response",
+    "K": "empty response",
+    "MMC": "empty response",
+    "MRO": "empty response",
+    "PKI": "empty response",
+    "PXD": "empty response",
+    "RE": "empty response",
+    "SEE": "empty response",
+    "WBA": "empty response"
+  },
+  "tickers_requested": 483,
+  "tickers_returned": 462,
+  "update_log": [
+    {
+      "last_date_after": "2026-10-26",
+      "last_date_before": "2026-10-23",
+      "mode": "incremental",
+      "new_rows": 1,
+      "risk_free": "1 new day(s) appended",
+      "tickers_added": [],
+      "tickers_appended": 453,
+      "tickers_refreshed_in_full": [
+        "CAT",
+        "PAYX"
+      ],
+      "tickers_refused": [
+        "PARA"
+      ],
+      "utc": "2026-10-27T01:48:51Z"
+    },
+    {
+      "last_date_after": "2026-10-27",
+      "last_date_before": "2026-10-26",
+      "mode": "incremental",
+      "new_rows": 1,
+      "risk_free": "1 new day(s) appended",
+      "tickers_added": [],
+      "tickers_appended": 456,
+      "tickers_refreshed_in_full": [
+        "CE"
+      ],
+      "tickers_refused": [
+        "PARA"
+      ],
+      "utc": "2026-10-28T02:01:03Z"
+    }
+  ]
+}
