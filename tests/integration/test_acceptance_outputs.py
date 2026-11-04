@@ -63,7 +63,9 @@ def test_C16_every_cached_per_ticker_count_matches_an_independent_recomputation(
         n, x = ind[(row.ticker, row.method, row.confidence)]
         assert (row.n_forecasts, row.breaches) == (n, x), (row.ticker, row.method, row.confidence)
         lr = -2.0 * (binom.logpmf(x, n, 1 - row.confidence) - binom.logpmf(x, n, x / n))
-        assert row.kupiec_lr == pytest.approx(max(lr, 0.0), abs=1e-6) and row.kupiec_p == pytest.approx(chi2.sf(max(lr, 0.0), 1), abs=1e-9)
+        # p is checked through the LR tolerance: when x/n equals the expected rate to the last digit, LR is ~1e-14 and p = 1 - 0.8*sqrt(LR) differs by ~1e-7 for a rounding difference
+        assert row.kupiec_lr == pytest.approx(max(lr, 0.0), abs=1e-6)
+        assert chi2.sf(max(lr, 0.0) + 1e-6, 1) - 1e-9 <= row.kupiec_p <= chi2.sf(max(lr - 1e-6, 0.0), 1) + 1e-9
         assert row.breach_rate == x / n
 
 

@@ -21,6 +21,7 @@ from scipy.stats import binom, chi2
 
 ROOT = Path(__file__).resolve().parents[1]
 WINDOW, CONFS = 250, (0.95, 0.99)
+LR_TOL = 1e-6  # largest accepted difference between the stored and the independently computed Kupiec LR
 
 prices = pd.read_parquet(ROOT / "data" / "prices.parquet")
 stored = pd.read_csv(ROOT / "results" / "var_backtest_by_ticker.csv")
@@ -60,7 +61,10 @@ for k, t in enumerate(tickers):
                 continue
             row = row.iloc[0]
             lr = -2.0 * (binom.logpmf(x, n, 1 - conf) - binom.logpmf(x, n, x / n))
-            ok = int(row.n_forecasts) == n and int(row.breaches) == x and abs(row.kupiec_lr - lr) < 1e-6 and abs(row.kupiec_p - chi2.sf(max(lr, 0.0), 1)) < 1e-9
+            # The p-value is compared through the LR tolerance, not on its own: when the breach rate equals the expected rate to the last digit
+            # (for example 86 of 1,720 at 95%), LR is about 1e-14 and p = 1 - 0.8 * sqrt(LR) moves by ~1e-7 for a rounding difference of 1e-14.
+            p_low, p_high = chi2.sf(max(lr, 0.0) + LR_TOL, 1) - 1e-9, chi2.sf(max(lr - LR_TOL, 0.0), 1) + 1e-9
+            ok = int(row.n_forecasts) == n and int(row.breaches) == x and abs(row.kupiec_lr - lr) < LR_TOL and p_low <= row.kupiec_p <= p_high
             if not ok:
                 bad.append((t, method, conf, f"stored n={row.n_forecasts}, x={row.breaches}; independent n={n}, x={x}"))
     if (k + 1) % 100 == 0:

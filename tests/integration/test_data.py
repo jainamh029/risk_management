@@ -53,9 +53,21 @@ def test_returns_match_an_independent_calculation(prices, returns):
         assert np.allclose(got, expected, rtol=0, atol=1e-12), t
 
 
-def test_no_filled_values_in_downloaded_series(meta):
-    # internal gaps would need an explicit decision; the real data has none
-    assert meta["internal_gap_counts"] == {}
+def test_no_filled_values_in_downloaded_series(prices, returns, meta):
+    # A day Yahoo has no price for (a halted or reassigned symbol) stays missing: never filled, never spanned by a return.
+    # The gaps must be disclosed accurately, be days the market was open, and be short.
+    first, last = prices.apply(pd.Series.first_valid_index), prices.apply(pd.Series.last_valid_index)
+    gaps = {t: prices[t].loc[first[t]: last[t]].isna() for t in prices.columns}
+    found = {t: int(g.sum()) for t, g in gaps.items() if g.any()}
+    assert meta["internal_gap_counts"] == found
+    market_open = prices.notna().mean(axis=1) >= 0.9
+    for t in found:
+        days = gaps[t][gaps[t]].index
+        assert found[t] <= 10, t
+        assert market_open.loc[days].all(), t  # the other tickers traded on every one of those days
+        assert returns[t].loc[days].isna().all(), t
+        after = prices[t].loc[days[-1]:].dropna().index[0]
+        assert np.isnan(returns[t].loc[after]), t  # no return stretches across the gap
 
 
 def test_short_series_are_recorded(prices, meta):
