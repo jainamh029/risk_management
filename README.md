@@ -39,57 +39,57 @@ Later, `python scripts/update_data.py --rebuild` adds only the new days and rege
 | Item | Value |
 |---|---|
 | Source | Yahoo Finance via yfinance, split and dividend adjusted close |
-| Downloaded (UTC) | 2026-11-04T05:43:29Z |
-| Date range | 2019-01-02 to 2026-11-03 (1971 trading days) |
+| Downloaded (UTC) | 2026-11-05T03:03:45Z |
+| Date range | 2019-01-02 to 2026-11-04 (1972 trading days) |
 | Tickers requested | 483 |
 | Tickers returned | 462 (452 stocks, 10 ETFs) |
 | Tickers Yahoo returned nothing for | 21 |
-| Average 13-week T-bill yield, whole range | 2.746% |
+| Average 13-week T-bill yield, whole range | 2.747% |
 
 ### VaR backtest (one-day forecasts, window of 250 days)
 
 | Method | Confidence | Tickers | Forecasts | Pooled breach rate | Expected | Share of tickers rejected (Kupiec, 5%) | Tickers with zero breaches |
 |---|---|---|---|---|---|---|---|
-| historical | 95% | 458 | 782,336 | 5.69% | 5.00% | 15.9% | 0 |
-| historical | 99% | 458 | 782,336 | 1.59% | 1.00% | 70.7% | 0 |
-| normal | 95% | 458 | 782,336 | 4.64% | 5.00% | 13.8% | 0 |
-| normal | 99% | 458 | 782,336 | 1.95% | 1.00% | 91.9% | 0 |
+| historical | 95% | 458 | 782,793 | 5.70% | 5.00% | 16.6% | 0 |
+| historical | 99% | 458 | 782,793 | 1.59% | 1.00% | 71.4% | 0 |
+| normal | 95% | 458 | 782,793 | 4.65% | 5.00% | 13.8% | 0 |
+| normal | 99% | 458 | 782,793 | 1.95% | 1.00% | 91.9% | 0 |
 
-Denominator: the 458 tickers are all tickers with enough history, including 10 ETFs; the 448 stocks alone account for 765,136 of the 782,336 forecasts. Each forecast is one ticker on one day.
+Denominator: the 458 tickers are all tickers with enough history, including 10 ETFs; the 448 stocks alone account for 765,583 of the 782,793 forecasts. Each forecast is one ticker on one day.
 
-### Latest one-day VaR and ES for SPY (most recent 250 days, ending 2026-11-03)
+### Latest one-day VaR and ES for SPY (most recent 250 days, ending 2026-11-04)
 
 | Method | VaR 95% | ES 95% | VaR 99% | ES 99% |
 |---|---|---|---|---|
 | historical | 1.42% | 1.70% | 1.78% | 2.13% |
-| normal | 1.27% | 1.61% | 1.82% | 2.09% |
+| normal | 1.28% | 1.61% | 1.83% | 2.10% |
 
 VaR and ES are shown as the loss, in percent of position value, for one trading day. 457 tickers had a complete window; 5 did not and are excluded, not filled.
 
-### Portfolio experiment: chosen with data to 2023-12-29, evaluated on 2024-01-02 to 2026-11-03
+### Portfolio experiment: chosen with data to 2023-12-29, evaluated on 2024-01-02 to 2026-11-04
 
 | Preset | Status | Stocks passing screen | Holdings | Sharpe, training (in-sample) | Sharpe, test (out-of-sample) | Total return, test | Max drawdown, test | Sharpe, same holdings equal-weighted, test | Total return, same holdings equal-weighted, test |
 |---|---|---|---|---|---|---|---|---|---|
 | conservative | not constructed | 0 | - | - | - | - | - | - | - |
-| balanced | constructed | 6 | 6 | 0.92 | 1.19 | 77.2% | -16.5% | 0.80 | 49.2% |
-| aggressive | constructed | 258 | 15 | 1.78 | 1.45 | 147.4% | -17.7% | 1.14 | 116.2% |
-| SPY (benchmark) | - | - | - | - | 0.93 | 63.9% | -18.8% | - | - |
+| balanced | constructed | 6 | 6 | 0.92 | 1.27 | 83.7% | -16.5% | 0.88 | 54.6% |
+| aggressive | constructed | 258 | 15 | 1.78 | 1.44 | 145.7% | -17.7% | 1.15 | 117.2% |
+| SPY (benchmark) | - | - | - | - | 0.97 | 66.6% | -18.8% | - | - |
 
-Risk-free rate used: 1.884% (training) and 4.268% (test), the average 13-week T-bill yield over each period. 436 stocks had a complete training history and were eligible.
+Risk-free rate used: 1.884% (training) and 4.267% (test), the average 13-week T-bill yield over each period. 436 stocks had a complete training history and were eligible.
 
 - conservative: 0 stocks passed the screen; at least 4 are required. The screen was not relaxed.
 
 ### Forecasting the 63-day return: out-of-sample evaluation
 
-Pooled models trained on 94,371 samples (feature dates 2019-07-10 to 2023-09-25; every target window ends by 2023-12-22) and tested on 291,133 samples (feature dates 2024-01-02 to 2026-08-05). The latest forecast uses features from 2026-11-03 for 447 stocks.
+Pooled models trained on 94,371 samples (feature dates 2019-07-10 to 2023-09-25; every target window ends by 2023-12-22) and tested on 291,581 samples (feature dates 2024-01-02 to 2026-08-06). The latest forecast uses features from 2026-11-04 for 447 stocks.
 | Model | R squared vs training mean | Direction accuracy (up vs not up) | Rank IC, non-overlapping periods | Rank IC, all dates | Top-fifth minus bottom-fifth return, non-overlapping |
 |---|---|---|---|---|---|
-| random forest | -0.91% | 53.7% | 0.044 (se 0.070, t 0.62, n 11) | 0.028 | 4.81% |
-| gradient boosting | -6.12% | 53.3% | 0.044 (se 0.076, t 0.57, n 11) | 0.028 | 4.49% |
-| ensemble | -3.02% | 53.6% | 0.044 (se 0.074, t 0.59, n 11) | 0.028 | 5.06% |
+| random forest | -0.92% | 53.7% | 0.044 (se 0.070, t 0.62, n 11) | 0.028 | 4.81% |
+| gradient boosting | -6.15% | 53.3% | 0.044 (se 0.076, t 0.58, n 11) | 0.028 | 5.01% |
+| ensemble | -3.06% | 53.6% | 0.044 (se 0.074, t 0.59, n 11) | 0.028 | 5.12% |
 | baseline: training-mean forecast | 0.00% | 57.4% | - | - | - |
-| baseline: mom 60 momentum feature alone | - | - | -0.069 (se 0.057, t -1.20, n 11) | -0.033 | - |
-| baseline: mom 126 momentum feature alone | - | - | 0.033 (se 0.048, t 0.68, n 11) | 0.013 | - |
+| baseline: mom 60 momentum feature alone | - | - | -0.069 (se 0.057, t -1.20, n 11) | -0.032 | - |
+| baseline: mom 126 momentum feature alone | - | - | 0.033 (se 0.048, t 0.68, n 11) | 0.012 | - |
 
 Share of test samples with a positive 63-day return: 57.4%.
 
@@ -105,18 +105,18 @@ Source: Wikipedia's current constituents (revision 1381923657) and table of inde
 | Stocks that were members on some dates only | 105 |
 | Stocks that were not members on any date, matching by symbol | 11 (5 with price data: AGL, DINO, EQR, FNF, PARA) |
 | Current index members that are not in the list | 91 |
-| Index members with price data in this snapshot | 74.9% on 2019-01-02, 81.9% on 2026-11-03, 82.9% on average |
-| Backtested forecast days on which the stock was an index member | 95.0% of 765,136 |
+| Index members with price data in this snapshot | 74.9% on 2019-01-02, 81.9% on 2026-11-04, 82.9% on average |
+| Backtested forecast days on which the stock was an index member | 95.0% of 765,583 |
 | Source tables that contradict each other | SATS |
 
-Pooled breach rate over all backtested days, and over only the days when the stock was an index member. Both columns use stocks only (448 stocks, 765,136 forecasts, of which 726,757 fall on member days), because ETFs have no index membership; the "All days" column therefore differs slightly from the table above, which includes the ETFs:
+Pooled breach rate over all backtested days, and over only the days when the stock was an index member. Both columns use stocks only (448 stocks, 765,583 forecasts, of which 727,169 fall on member days), because ETFs have no index membership; the "All days" column therefore differs slightly from the table above, which includes the ETFs:
 
 | Method | Confidence | All days | Member days only | Expected |
 |---|---|---|---|---|
-| historical | 95% | 5.698% | 5.687% | 5.00% |
-| historical | 99% | 1.590% | 1.585% | 1.00% |
-| normal | 95% | 4.627% | 4.637% | 5.00% |
-| normal | 99% | 1.939% | 1.935% | 1.00% |
+| historical | 95% | 5.701% | 5.691% | 5.00% |
+| historical | 99% | 1.592% | 1.588% | 1.00% |
+| normal | 95% | 4.630% | 4.641% | 5.00% |
+| normal | 99% | 1.942% | 1.938% | 1.00% |
 
 Matching is by ticker symbol. A company that changed its symbol cannot be matched, so some of the stocks counted as non-members are renamed members; the history table itself records, for example, HFC (the earlier symbol of DINO) as a member until 2021-06-04, and describes Equity Residential as renamed. These were not resolved.
 
