@@ -19,7 +19,7 @@
     "note": "Wikipedia is not the official S&P Dow Jones Indices record"
   },
   "window_start": "2019-01-02",
-  "window_end": "2026-11-05",
+  "window_end": "2026-11-09",
   "tickers_in_list": 483,
   "etfs_in_list": 10,
   "stocks_in_list": 473,
@@ -137,51 +137,51 @@
   "coverage_of_index_by_price_data": {
     "first_date": 0.7490118577075099,
     "last_date": 0.8190854870775348,
-    "mean": 0.8294420002170608,
+    "mean": 0.8294315126088183,
     "min": 0.7470355731225297
   },
   "backtest": {
     "stocks_tested": 448,
-    "forecast_days": 766030,
-    "forecast_days_while_member": 727581,
-    "share_while_member": 0.9498074487944337
+    "forecast_days": 766924,
+    "forecast_days_while_member": 728405,
+    "share_while_member": 0.9497746843233489
   },
   "pooled_breach_rate_members_only": [
     {
       "method": "historical",
       "confidence": 0.95,
-      "breach_rate_all_days": 0.057217080271007664,
-      "breach_rate_member_days_only": 0.05710566933441088,
+      "breach_rate_all_days": 0.057222097626361934,
+      "breach_rate_member_days_only": 0.05710833945401254,
       "expected_rate": 0.050000000000000044,
-      "forecast_days_all": 766030,
-      "forecast_days_member_only": 727581
+      "forecast_days_all": 766924,
+      "forecast_days_member_only": 728405
     },
     {
       "method": "historical",
       "confidence": 0.99,
-      "breach_rate_all_days": 0.016017649439316998,
-      "breach_rate_member_days_only": 0.015973479241486514,
+      "breach_rate_all_days": 0.016008105105590646,
+      "breach_rate_member_days_only": 0.015965019460327703,
       "expected_rate": 0.010000000000000009,
-      "forecast_days_all": 766030,
-      "forecast_days_member_only": 727581
+      "forecast_days_all": 766924,
+      "forecast_days_member_only": 728405
     },
     {
       "method": "normal",
       "confidence": 0.95,
-      "breach_rate_all_days": 0.04647990287586648,
-      "breach_rate_member_days_only": 0.04658450399336981,
+      "breach_rate_all_days": 0.046471358309297925,
+      "breach_rate_member_days_only": 0.046575737398837184,
       "expected_rate": 0.050000000000000044,
-      "forecast_days_all": 766030,
-      "forecast_days_member_only": 727581
+      "forecast_days_all": 766924,
+      "forecast_days_member_only": 728405
     },
     {
       "method": "normal",
       "confidence": 0.99,
-      "breach_rate_all_days": 0.01951359607326084,
-      "breach_rate_member_days_only": 0.019482366911725293,
+      "breach_rate_all_days": 0.019499976529617016,
+      "breach_rate_member_days_only": 0.019468564878055476,
       "expected_rate": 0.010000000000000009,
-      "forecast_days_all": 766030,
-      "forecast_days_member_only": 727581
+      "forecast_days_all": 766924,
+      "forecast_days_member_only": 728405
     }
   ],
   "source_inconsistencies": {
