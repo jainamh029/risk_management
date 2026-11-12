@@ -1,5 +1,5 @@
 {
-  "downloaded_utc": "2026-11-10T04:29:44Z",
+  "downloaded_utc": "2026-11-12T03:35:26Z",
   "fewer_than_250_valid_prices": {
     "AVB": 1,
     "EA": 1,
@@ -11,7 +11,7 @@
   "internal_gap_counts": {
     "PARA": 2
   },
-  "last_date": "2026-11-09",
+  "last_date": "2026-11-11",
   "listed_after_start": [
     "ABNB",
     "AGL",
@@ -30,8 +30,8 @@
     "VLTO",
     "WBD"
   ],
-  "n_dates": 1975,
-  "requested_end_exclusive": "2026-11-10",
+  "n_dates": 1977,
+  "requested_end_exclusive": "2026-11-12",
   "requested_start": "2019-01-01",
   "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
   "risk_free_series": "^IRX",
@@ -192,6 +192,33 @@
       ],
       "tickers_refused": [],
       "utc": "2026-11-10T04:29:44Z"
+    },
+    {
+      "last_date_after": "2026-11-11",
+      "last_date_before": "2026-11-09",
+      "mode": "incremental",
+      "new_rows": 2,
+      "risk_free": "2 new day(s) appended",
+      "tickers_added": [],
+      "tickers_appended": 444,
+      "tickers_refreshed_in_full": [
+        "AEP",
+        "BKR",
+        "ETN",
+        "F",
+        "IBM",
+        "MKTX",
+        "PCAR",
+        "POOL",
+        "PPG",
+        "ROL",
+        "TGT",
+        "URI",
+        "V",
+        "WELL"
+      ],
+      "tickers_refused": [],
+      "utc": "2026-11-12T03:35:26Z"
     }
   ]
 }

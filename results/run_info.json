@@ -11,24 +11,24 @@
     "min_assets": 4
   },
   "data": {
-    "downloaded_utc": "2026-11-10T04:29:44Z",
+    "downloaded_utc": "2026-11-12T03:35:26Z",
     "first_date": "2019-01-02",
-    "last_date": "2026-11-09",
-    "n_dates": 1975,
+    "last_date": "2026-11-11",
+    "n_dates": 1977,
     "tickers_requested": 483,
     "tickers_returned": 462,
     "tickers_failed": 21,
     "etfs_returned": 10,
     "stocks_returned": 452,
-    "risk_free_all": 0.027490567084889905,
+    "risk_free_all": 0.027504385428855995,
     "risk_free_train": 0.018844173310042487,
-    "risk_free_test": 0.04266094835233489
+    "risk_free_test": 0.04265674543646015
   },
   "var_latest": {
     "n_tickers": 457,
     "excluded_incomplete_window": 5,
-    "window_start": "2025-11-11",
-    "window_end": "2026-11-09"
+    "window_start": "2025-11-13",
+    "window_end": "2026-11-11"
   },
   "backtest": {
     "n_tickers": 458
