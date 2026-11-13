@@ -1,5 +1,5 @@
 {
-  "downloaded_utc": "2026-11-12T03:35:26Z",
+  "downloaded_utc": "2026-11-13T03:07:58Z",
   "fewer_than_250_valid_prices": {
     "AVB": 1,
     "EA": 1,
@@ -11,7 +11,7 @@
   "internal_gap_counts": {
     "PARA": 2
   },
-  "last_date": "2026-11-11",
+  "last_date": "2026-11-12",
   "listed_after_start": [
     "ABNB",
     "AGL",
@@ -30,8 +30,8 @@
     "VLTO",
     "WBD"
   ],
-  "n_dates": 1977,
-  "requested_end_exclusive": "2026-11-12",
+  "n_dates": 1978,
+  "requested_end_exclusive": "2026-11-13",
   "requested_start": "2019-01-01",
   "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
   "risk_free_series": "^IRX",
@@ -219,6 +219,29 @@
       ],
       "tickers_refused": [],
       "utc": "2026-11-12T03:35:26Z"
+    },
+    {
+      "last_date_after": "2026-11-12",
+      "last_date_before": "2026-11-11",
+      "mode": "incremental",
+      "new_rows": 1,
+      "risk_free": "downloaded again in full (the overlap did not match or could not be checked)",
+      "tickers_added": [],
+      "tickers_appended": 448,
+      "tickers_refreshed_in_full": [
+        "AAPL",
+        "AWK",
+        "DHI",
+        "DINO",
+        "FANG",
+        "IR",
+        "RMD",
+        "SBAC",
+        "TJX",
+        "ZION"
+      ],
+      "tickers_refused": [],
+      "utc": "2026-11-13T03:07:58Z"
     }
   ]
 }
