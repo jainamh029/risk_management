@@ -1,5 +1,5 @@
 {
-  "downloaded_utc": "2026-11-13T03:07:58Z",
+  "downloaded_utc": "2026-11-14T02:54:03Z",
   "fewer_than_250_valid_prices": {
     "AVB": 1,
     "EA": 1,
@@ -11,7 +11,7 @@
   "internal_gap_counts": {
     "PARA": 2
   },
-  "last_date": "2026-11-12",
+  "last_date": "2026-11-13",
   "listed_after_start": [
     "ABNB",
     "AGL",
@@ -30,8 +30,8 @@
     "VLTO",
     "WBD"
   ],
-  "n_dates": 1978,
-  "requested_end_exclusive": "2026-11-13",
+  "n_dates": 1979,
+  "requested_end_exclusive": "2026-11-14",
   "requested_start": "2019-01-01",
   "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
   "risk_free_series": "^IRX",
@@ -242,6 +242,41 @@
       ],
       "tickers_refused": [],
       "utc": "2026-11-13T03:07:58Z"
+    },
+    {
+      "last_date_after": "2026-11-13",
+      "last_date_before": "2026-11-12",
+      "mode": "incremental",
+      "new_rows": 1,
+      "risk_free": "1 new day(s) appended",
+      "tickers_added": [],
+      "tickers_appended": 436,
+      "tickers_refreshed_in_full": [
+        "CHD",
+        "COR",
+        "CTAS",
+        "DOC",
+        "DUK",
+        "EMR",
+        "ETR",
+        "GLW",
+        "HON",
+        "IVZ",
+        "LLY",
+        "MMM",
+        "MSCI",
+        "OTIS",
+        "PH",
+        "SBUX",
+        "SCHW",
+        "SHW",
+        "SJM",
+        "TECH",
+        "TFC",
+        "WEC"
+      ],
+      "tickers_refused": [],
+      "utc": "2026-11-14T02:54:03Z"
     }
   ]
 }
