@@ -1,0 +1,184 @@
+{
+  "info": {
+    "horizon_trading_days": 63,
+    "features": [
+      "ret_5",
+      "mom_20",
+      "mom_60",
+      "mom_126",
+      "vol_20",
+      "vol_60",
+      "skew_60",
+      "kurt_60",
+      "dist_ma20",
+      "dist_ma50",
+      "drawdown_60"
+    ],
+    "n_eligible_stocks": 452,
+    "train_samples": 94371,
+    "train_first_feature_date": "2019-07-10",
+    "train_last_feature_date": "2023-09-25",
+    "train_last_target_end_date": "2023-12-22",
+    "test_samples": 296957,
+    "test_first_feature_date": "2024-01-02",
+    "test_last_feature_date": "2026-08-24",
+    "final_model_train_samples": 159753,
+    "final_model_last_feature_date": "2026-08-24",
+    "latest_feature_date": "2026-11-20",
+    "latest_forecasts": 447,
+    "rf_params": {
+      "n_estimators": 200,
+      "max_depth": 8,
+      "min_samples_leaf": 100,
+      "max_features": "sqrt",
+      "n_jobs": -1
+    },
+    "gb_params": {
+      "n_estimators": 150,
+      "max_depth": 3,
+      "learning_rate": 0.05,
+      "subsample": 0.7
+    },
+    "rf_weight": 0.5,
+    "seed": 0
+  },
+  "models": {
+    "random_forest": {
+      "n_test_samples": 296957,
+      "oos_r2_vs_training_mean": -0.012044108084677818,
+      "oos_r2_status": "defined",
+      "direction_accuracy": 0.5367746845502884,
+      "rank_ic_all_dates": {
+        "n": 663,
+        "mean": 0.024138212879529858,
+        "std": 0.17599693259412688,
+        "std_error": 0.006835154480776634,
+        "t_stat": 3.5314802243924106
+      },
+      "rank_ic_nonoverlapping": {
+        "n": 11,
+        "mean": 0.04382889093441757,
+        "std": 0.23392112624993258,
+        "std_error": 0.07052987330076196,
+        "t_stat": 0.6214230776725934
+      },
+      "quintile_spread_all_dates": {
+        "n": 663,
+        "mean": 0.03445358004873596,
+        "std": 0.09848734548959073,
+        "std_error": 0.0038249315536391165,
+        "t_stat": 9.00763309501738
+      },
+      "quintile_spread_nonoverlapping": {
+        "n": 11,
+        "mean": 0.04787374243695186,
+        "std": 0.13652609887709624,
+        "std_error": 0.04116416764238999,
+        "t_stat": 1.16299551718987
+      }
+    },
+    "gradient_boosting": {
+      "n_test_samples": 296957,
+      "oos_r2_vs_training_mean": -0.06605973064093362,
+      "oos_r2_status": "defined",
+      "direction_accuracy": 0.5328886000330014,
+      "rank_ic_all_dates": {
+        "n": 663,
+        "mean": 0.023704491574409407,
+        "std": 0.17946687404126915,
+        "std_error": 0.006969915839857608,
+        "t_stat": 3.400972424782345
+      },
+      "rank_ic_nonoverlapping": {
+        "n": 11,
+        "mean": 0.04522106069572341,
+        "std": 0.25396912335930166,
+        "std_error": 0.07657457186529897,
+        "t_stat": 0.5905493115295638
+      },
+      "quintile_spread_all_dates": {
+        "n": 663,
+        "mean": 0.03590195884113655,
+        "std": 0.10166746697025263,
+        "std_error": 0.003948437237900602,
+        "t_stat": 9.092700903668344
+      },
+      "quintile_spread_nonoverlapping": {
+        "n": 11,
+        "mean": 0.05280217800198246,
+        "std": 0.1475660296238375,
+        "std_error": 0.044492832005885344,
+        "t_stat": 1.1867569588512143
+      }
+    },
+    "ensemble": {
+      "n_test_samples": 296957,
+      "oos_r2_vs_training_mean": -0.03410851262300385,
+      "oos_r2_status": "defined",
+      "direction_accuracy": 0.5353536033836549,
+      "rank_ic_all_dates": {
+        "n": 663,
+        "mean": 0.02426726477741395,
+        "std": 0.1790231843236125,
+        "std_error": 0.0069526843590754445,
+        "t_stat": 3.4903446674862377
+      },
+      "rank_ic_nonoverlapping": {
+        "n": 11,
+        "mean": 0.04485739056116766,
+        "std": 0.24768433098576886,
+        "std_error": 0.07467963566636301,
+        "t_stat": 0.6006642930285772
+      },
+      "quintile_spread_all_dates": {
+        "n": 663,
+        "mean": 0.03561795445884399,
+        "std": 0.1011499822272648,
+        "std_error": 0.0039283397958166325,
+        "t_stat": 9.066923003140987
+      },
+      "quintile_spread_nonoverlapping": {
+        "n": 11,
+        "mean": 0.051511143172194386,
+        "std": 0.14572971896823603,
+        "std_error": 0.04393916351105247,
+        "t_stat": 1.1723287167093488
+      }
+    }
+  },
+  "baselines": {
+    "training_mean_forecast": {
+      "value": 0.0357497679664417,
+      "direction_accuracy": 0.5724431483346074
+    },
+    "share_of_test_samples_with_positive_return": 0.5724431483346074,
+    "rank_ic_mom_60_all_dates": {
+      "n": 663,
+      "mean": -0.030803350498591616,
+      "std": 0.14912722052353822,
+      "std_error": 0.005791621334207517,
+      "t_stat": -5.318605744587499
+    },
+    "rank_ic_mom_60_nonoverlapping": {
+      "n": 11,
+      "mean": -0.06907199183738474,
+      "std": 0.1906058606669955,
+      "std_error": 0.057469829334107686,
+      "t_stat": -1.2018826684837796
+    },
+    "rank_ic_mom_126_all_dates": {
+      "n": 663,
+      "mean": 0.0104450287068611,
+      "std": 0.13456758418638964,
+      "std_error": 0.005226171913689262,
+      "t_stat": 1.9986002908748057
+    },
+    "rank_ic_mom_126_nonoverlapping": {
+      "n": 11,
+      "mean": 0.03254564319456538,
+      "std": 0.15899312448381708,
+      "std_error": 0.04793823074173544,
+      "t_stat": 0.6789078923230025
+    }
+  }
+}
