@@ -39,7 +39,7 @@ Later, `python scripts/update_data.py --rebuild` adds only the new days and rege
 | Item | Value |
 |---|---|
 | Source | Yahoo Finance via yfinance, split and dividend adjusted close |
-| Downloaded (UTC) | 2026-11-26T04:40:53Z |
+| Downloaded (UTC) | 2026-11-27T04:45:05Z |
 | Date range | 2019-01-02 to 2026-11-25 (1987 trading days) |
 | Tickers requested | 483 |
 | Tickers returned | 462 (452 stocks, 10 ETFs) |

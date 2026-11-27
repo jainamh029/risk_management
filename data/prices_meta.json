@@ -1,5 +1,5 @@
 {
-  "downloaded_utc": "2026-11-26T04:40:53Z",
+  "downloaded_utc": "2026-11-27T04:45:05Z",
   "fewer_than_250_valid_prices": {
     "AVB": 1,
     "EA": 1,
@@ -31,7 +31,7 @@
     "WBD"
   ],
   "n_dates": 1987,
-  "requested_end_exclusive": "2026-11-26",
+  "requested_end_exclusive": "2026-11-27",
   "requested_start": "2019-01-01",
   "risk_free_note": "13-week T-bill yield in percent per year; analyses use its average over the analysis window",
   "risk_free_series": "^IRX",
@@ -427,6 +427,18 @@
       ],
       "tickers_refused": [],
       "utc": "2026-11-26T04:40:53Z"
+    },
+    {
+      "last_date_after": "2026-11-25",
+      "last_date_before": "2026-11-25",
+      "mode": "incremental",
+      "new_rows": 0,
+      "risk_free": "downloaded again in full (the overlap did not match or could not be checked)",
+      "tickers_added": [],
+      "tickers_appended": 0,
+      "tickers_refreshed_in_full": [],
+      "tickers_refused": [],
+      "utc": "2026-11-27T04:45:05Z"
     }
   ]
 }

@@ -11,7 +11,7 @@
     "min_assets": 4
   },
   "data": {
-    "downloaded_utc": "2026-11-26T04:40:53Z",
+    "downloaded_utc": "2026-11-27T04:45:05Z",
     "first_date": "2019-01-02",
     "last_date": "2026-11-25",
     "n_dates": 1987,
@@ -20,9 +20,9 @@
     "tickers_failed": 21,
     "etfs_returned": 10,
     "stocks_returned": 452,
-    "risk_free_all": 0.0275743029624759,
+    "risk_free_all": 0.02757430296487568,
     "risk_free_train": 0.018844173310042487,
-    "risk_free_test": 0.04263946496900708
+    "risk_free_test": 0.042639464975548054
   },
   "var_latest": {
     "n_tickers": 457,
