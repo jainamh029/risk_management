@@ -1,0 +1,50 @@
+[
+  {
+    "method": "historical",
+    "confidence": 0.95,
+    "n_tickers": 458,
+    "total_forecasts": 790105,
+    "total_breaches": 45255,
+    "mean_ticker_breach_rate": 0.05728392590176632,
+    "share_rejected": 0.17685589519650655,
+    "pooled_breach_rate": 0.05727719733453149,
+    "expected_rate": 0.050000000000000044,
+    "zero_breach_tickers": 0
+  },
+  {
+    "method": "historical",
+    "confidence": 0.99,
+    "n_tickers": 458,
+    "total_forecasts": 790105,
+    "total_breaches": 12663,
+    "mean_ticker_breach_rate": 0.016020927584124805,
+    "share_rejected": 0.6397379912663755,
+    "pooled_breach_rate": 0.01602698375532366,
+    "expected_rate": 0.010000000000000009,
+    "zero_breach_tickers": 0
+  },
+  {
+    "method": "normal",
+    "confidence": 0.95,
+    "n_tickers": 458,
+    "total_forecasts": 790105,
+    "total_breaches": 36882,
+    "mean_ticker_breach_rate": 0.04662443666793089,
+    "share_rejected": 0.14410480349344978,
+    "pooled_breach_rate": 0.04667987166262712,
+    "expected_rate": 0.050000000000000044,
+    "zero_breach_tickers": 0
+  },
+  {
+    "method": "normal",
+    "confidence": 0.99,
+    "n_tickers": 458,
+    "total_forecasts": 790105,
+    "total_breaches": 15465,
+    "mean_ticker_breach_rate": 0.019550712570559473,
+    "share_rejected": 0.9061135371179039,
+    "pooled_breach_rate": 0.019573347846172345,
+    "expected_rate": 0.010000000000000009,
+    "zero_breach_tickers": 0
+  }
+]
